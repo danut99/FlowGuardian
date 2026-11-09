@@ -449,17 +449,18 @@ async function main() {
   const browser = await chromium.launch();
   const deadline = Date.now() + BUDGET_MS;
   try {
-    // Someone is waiting on these: chat and new-site scans go first, and again between every background job
+    // Someone is waiting on these: chat, new-site scans and test runs go first, and again between every background job.
+    // Test runs take seconds each, so scheduled ones riding along with "Rulează" clicks cost little.
     const interactive = async () => {
       await drain('claim_next_ai', deadline, (r) => processAi(browser, r));
       await drain('claim_next_scan', deadline, (s) => processScan(browser, s));
+      await drain('claim_next_run', deadline, (r) => processRun(browser, r));
     };
     await interactive();
     await checkDeploys(browser).catch((e) => console.error('Deploy detection failed:', e?.message ?? e));
     await drain('claim_next_deep', deadline, (p) => processDeep(browser, p), interactive);
     await drain('claim_next_pages', deadline, (s) => processPages(browser, s), interactive);
     await drain('claim_next_suggest', deadline, (s) => processSuggest(browser, s), interactive);
-    await drain('claim_next_run', deadline, (r) => processRun(browser, r), interactive);
   } finally {
     await browser.close();
   }
