@@ -470,7 +470,85 @@ async function main() {
   }
 }
 
-main().catch((e) => {
+// Most urgent first: someone is waiting on chat, scans and test runs
+const QUEUES = [
+  ['claim_next_ai', processAi], ['claim_next_scan', processScan], ['claim_next_run', processRun],
+  ['claim_next_deep', processDeep], ['claim_next_pages', processPages], ['claim_next_suggest', processSuggest],
+];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function maintain(browser, last) {
+  const now = Date.now();
+  const { data: queued, error } = await db.rpc('enqueue_due_runs');
+  if (error) throw error;
+  if (queued) console.log(`Enqueued ${queued} due runs`);
+  await runApiMonitors();
+  if (now - last.deploys > 10 * 60_000) {
+    last.deploys = now;
+    await checkDeploys(browser);
+  }
+  if (now - last.cleanup > 60 * 60_000) {
+    last.cleanup = now;
+    await cleanupOrphanScreenshots();
+    await cleanupOrphanPageShots();
+  }
+}
+
+// Always-on server: WORKER_SLOTS jobs in parallel, picked up within seconds; scheduling and maintenance every minute.
+// Only slot 0 polls while idle; it wakes the others when it finds work, so an idle server makes ~1 query/s.
+async function daemon() {
+  const slots = Number(process.env.WORKER_SLOTS ?? 3);
+  let browser = await chromium.launch();
+  const getBrowser = async () => {
+    if (!browser.isConnected()) browser = await chromium.launch();
+    return browser;
+  };
+  let stopping = false;
+  for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { stopping = true; wakeAll(); });
+  let waiters = [];
+  const wakeAll = () => { waiters.forEach((w) => w()); waiters = []; };
+  const idle = (ms) => new Promise((r) => {
+    const t = setTimeout(r, ms);
+    waiters.push(() => { clearTimeout(t); r(); });
+  });
+
+  const takeOne = async () => {
+    for (const [rpc, handle] of QUEUES) {
+      const { data, error } = await db.rpc(rpc);
+      if (error) throw error;
+      if (data?.[0]) {
+        wakeAll();
+        await handle(await getBrowser(), data[0]);
+        return true;
+      }
+    }
+    return false;
+  };
+  const slot = async (i) => {
+    while (!stopping) {
+      let worked = false;
+      try {
+        worked = await takeOne();
+      } catch (e) {
+        console.error(`Slot ${i}:`, e?.message ?? e);
+      }
+      if (!worked && !stopping) await idle(i === 0 ? 2_000 : 60_000);
+    }
+  };
+  const last = { deploys: 0, cleanup: 0 };
+  const maintenance = async () => {
+    while (!stopping) {
+      await maintain(await getBrowser(), last).catch((e) => console.error('Maintenance failed:', e?.message ?? e));
+      for (let s = 0; s < 60 && !stopping; s++) await sleep(1_000);
+    }
+  };
+
+  console.log(`Worker always-on: ${slots} parallel jobs`);
+  await Promise.all([...Array.from({ length: slots }, (_, i) => slot(i)), maintenance()]);
+  await browser.close();
+}
+
+(process.env.WORKER_MODE === 'daemon' ? daemon() : main()).catch((e) => {
   console.error(e);
   process.exit(1);
 });
