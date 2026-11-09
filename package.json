@@ -1,0 +1,13 @@
+{
+  "name": "flowguardian",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n fe,worker -c cyan,magenta \"npm run dev --prefix frontend\" \"npm run dev:loop --prefix backend/worker\"",
+    "dev:fe": "npm run dev --prefix frontend",
+    "dev:worker": "npm run dev --prefix backend/worker",
+    "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend/worker"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
