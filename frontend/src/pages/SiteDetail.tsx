@@ -26,7 +26,10 @@ export function SiteDetail() {
   const load = useCallback(async () => {
     if (!id) return
     const [siteRes, testsRes, runsRes, pagesRes] = await Promise.all([
-      supabase.from('sites').select('*').eq('id', id).single(),
+      supabase.from('sites').select('*').eq('id', id).single().then((result) => {
+        if (result.data) setSite(result.data)
+        return result
+      }),
       supabase.from('tests')
         .select('*, steps:test_steps(position, action, locators, value, note)')
         .eq('site_id', id)
@@ -69,6 +72,19 @@ export function SiteDetail() {
       supabase.removeChannel(channel)
     }
   }, [id, load, loadPages])
+
+  const scanStatus = site?.scan_status
+
+  // Poll active scans as a fallback when realtime delivery is unavailable.
+  useEffect(() => {
+    if (!id || !scanStatus || !['pending', 'scanning'].includes(scanStatus)) return
+    let cancelled = false
+    const timer = window.setInterval(async () => {
+      const { data } = await supabase.from('sites').select('*').eq('id', id).single()
+      if (!cancelled && data) setSite(data)
+    }, 2000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [id, scanStatus])
 
   async function act(fn: () => PromiseLike<{ error: { message: string } | null }>) {
     const { error } = await fn()

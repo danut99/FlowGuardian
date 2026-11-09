@@ -1,3 +1,5 @@
+import { FindingEvidence } from '../components/FindingEvidence'
+import type { Check } from '../types'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
@@ -6,7 +8,6 @@ import { Favicon, ScoreRing, StatusIcon } from '../components/ui'
 import { LockIcon } from '../components/icons'
 import { fadeUp, stagger } from '../components/motion'
 import { BrandMark } from './Landing'
-import type { CheckStatus } from '../types'
 
 type Teaser = {
   title: string
@@ -16,14 +17,15 @@ type Teaser = {
   score: number
   counts: { fail: number; warn: number; pass: number }
   groups: { id: string; fail: number; warn: number; pass: number }[]
-  top: { group: string; label: string; status: CheckStatus }[]
+  top: (Omit<Check, 'id' | 'detail'> & { id?: string; detail?: string })[]
+  partial?: boolean
   hidden: number
 }
 type Scan = { url: string; status: 'pending' | 'running' | 'done' | 'error'; teaser: Teaser | null; error: string | null }
 
 const GROUP_LABEL: Record<string, string> = {
   availability: 'Availability', performance: 'Speed', network: 'Slow connection', content: 'Functionality',
-  text: 'Text & content', seo: 'SEO & mobile', security: 'Security', compliance: 'Legal compliance',
+  text: 'Text & content', seo: 'SEO & mobile', security: 'Security', compliance: 'Privacy & policy review',
 }
 const CHECKING = ['Opening your home page like a real visitor', 'Measuring speed', 'Checking HTTPS and the certificate', 'Reading SEO and mobile basics', 'Looking at security headers', 'Checking privacy and cookie basics']
 // Placeholder rows behind the lock: never real data, so there is nothing to uncover in the page source
@@ -68,7 +70,7 @@ export function PublicReport() {
         </div>
       )}
 
-      {scan && (scan.status === 'pending' || scan.status === 'running') && <Checking host={host} />}
+      {scan && (scan.status === 'pending' || scan.status === 'running') && !scan.teaser && <Checking host={host} />}
 
       {scan?.status === 'error' && (
         <div className="card report-empty">
@@ -78,7 +80,7 @@ export function PublicReport() {
         </div>
       )}
 
-      {scan?.status === 'done' && scan.teaser && <Report host={host} t={scan.teaser} />}
+      {scan?.teaser && scan.status !== 'error' && <>{scan.status !== 'done' && <p className="notice-progress">First results are ready. Checking performance, privacy and the remaining home page checks...</p>}<Report host={host} t={scan.teaser} /></>}
     </div>
   )
 }
@@ -120,7 +122,7 @@ function Report({ host, t }: { host: string; t: Teaser }) {
       <motion.div variants={fadeUp} className="card report-head">
         <Favicon src={t.icon} large />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="muted small">Free check · home page</div>
+          <div className="muted small">{t.partial ? 'Preliminary check / results still arriving' : 'Free check / home page'}</div>
           <h1 className="truncate" style={{ margin: '0.15rem 0' }}>{t.title || host}</h1>
           <div className="chips">
             <span className="chip">{host}</span>
@@ -131,6 +133,7 @@ function Report({ host, t }: { host: string; t: Teaser }) {
         <ScoreRing score={t.score} size={96} />
       </motion.div>
 
+      <p className="muted small">The score summarizes automated checks. Speed readings are single desktop lab observations, not Lighthouse scores or real-user Core Web Vitals. Privacy findings need review and are not legal advice. Passive scans do not submit forms or verify email delivery.</p>
       <motion.div variants={fadeUp} className="summary">
         {([['fail', 'Problems'], ['warn', 'Recommendations'], ['pass', 'All good']] as const).map(([k, label]) => (
           <div key={k} className="card stat"><span className={`dot ${k}`} /><div><b>{t.counts[k]}</b><div className="muted small">{label}</div></div></div>
@@ -158,9 +161,9 @@ function Report({ host, t }: { host: string; t: Teaser }) {
             {t.top.map((c) => (
               <div key={c.label} className="report-issue">
                 <StatusIcon status={c.status} />
-                <span style={{ flex: 1 }}>{c.label}</span>
+                <div style={{ flex: 1 }}><b>{c.label}</b>{c.detail && <p className="muted small">{c.detail}</p>}<FindingEvidence check={{ ...c, id: c.id ?? c.label, detail: c.detail ?? '' }} /></div>
                 <span className="muted small">{GROUP_LABEL[c.group] ?? c.group}</span>
-                <span className="locked-pill"><LockIcon /> details</span>
+
               </div>
             ))}
           </div>

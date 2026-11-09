@@ -15,6 +15,11 @@ class HealthFailure extends Error {
 async function open(page, url, waitUntil = 'load') {
   const res = await page.goto(url, { waitUntil, timeout: NAV_TIMEOUT });
   const status = res?.status() ?? 0;
+  if (status === 403 || status === 429) {
+    const failure = new HealthFailure(`Access was blocked (HTTP ${status}).`);
+    failure.kind = 'blocked';
+    throw failure;
+  }
   if (status >= 400) throw new HealthFailure(`The page responded with HTTP ${status}.`);
   return res;
 }
@@ -282,7 +287,7 @@ export async function runCheck(page, site, spec) {
     await fn(page, site, arg);
     return null;
   } catch (e) {
-    if (e instanceof HealthFailure) return { message: e.message, screenshot: e.screenshot };
+    if (e instanceof HealthFailure) return { message: e.message, screenshot: e.screenshot, kind: e.kind ?? 'real_bug' };
     throw e;
   }
 }

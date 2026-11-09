@@ -1,3 +1,4 @@
+import { attachEvidence } from './evidence.mjs';
 // Site overview + essential checks every site should pass. Passive only: we read what any visitor gets.
 // Security findings follow the "defense-in-depth gaps are hardening notes, not vulnerabilities" rule → warn, never fail.
 import tls from 'node:tls';
@@ -137,13 +138,14 @@ async function robotsInfo(context, origin) {
   return { found: robots != null, blocksAll, sitemap };
 }
 
-export async function inspectPage(context, url) {
+export async function inspectPage(context, url, { onEarly } = {}) {
   const page = await context.newPage();
   const requests = [];
   const sizes = [];
   const jsErrors = [];
   const brokenImages = [];
-  page.on('request', (r) => requests.push({ url: r.url(), type: r.resourceType() }));
+  const observedAt = Date.now();
+  page.on('request', (r) => requests.push({ url: r.url(), type: r.resourceType(), at_ms: Date.now() - observedAt }));
   page.on('requestfinished', (r) => sizes.push(r.sizes().then((s) => s.responseBodySize + s.responseHeadersSize, () => 0)));
   page.on('pageerror', (e) => jsErrors.push(e.message.slice(0, 300)));
   page.on('response', (r) => {
@@ -157,13 +159,13 @@ export async function inspectPage(context, url) {
       const code = e.message.match(/net::(ERR_[A-Z_]+)/)?.[1];
       throw new Error(code ? `The site is not responding (${code}).` : 'The site did not respond within 30 seconds (tried twice).');
     });
+    if (onEarly) {
+      const early = await earlyOverview(page, res);
+      await onEarly(early);
+    }
     // Trackers/long-polling can delay the load event forever; the page is usable without it
     const load_ms = await page.waitForLoadState('load', { timeout: 20_000 }).then(() => Date.now() - started, () => null);
-    await page.waitForTimeout(1500);
-    // Cookie banners often appear a few seconds after load; give them until ~7 s after start
-    await page.waitForFunction(() => [...document.querySelectorAll('button, [role="button"]')].some((b) =>
-      /accept|agree|akzept|zustimm|accepter|acept|accett|aceit|akceptuj|zgadzam|de acord|allow/i.test(`${b.innerText} ${b.getAttribute('aria-label') ?? ''}`)),
-    null, { timeout: Math.max(0, 7000 - (Date.now() - started)) }).catch(() => {});
+    await page.waitForTimeout(Math.max(1500, 7000 - (Date.now() - started)));
     const headers = res?.headers() ?? {};
     const status = res?.status() ?? null;
     const html = await page.content();
@@ -211,7 +213,7 @@ export async function inspectPage(context, url) {
     })).catch(() => ({ lcp: null, cls: null, ttfb: null }));
     const bytes = (await Promise.all(sizes)).reduce((a, b) => a + b, 0);
     return {
-      status, finalUrl: page.url(), headers, html, meta, requests, load_ms,
+      status, finalUrl: page.url(), headers, html, meta, requests, load_ms, observation_ms: Date.now() - started,
       perf: { ...vitals, bytes, requests: requests.length },
       insecure: requests.filter((r) => r.url.startsWith('http://')).map((r) => r.url),
       js_errors: [...new Set(jsErrors)].slice(0, 5),
@@ -235,7 +237,10 @@ export const grade = (v, good, bad) => (v == null ? 'unknown' : v <= good ? null
 const withPages = (c, list) => (c.status !== 'pass' && list.length ? { ...c, pages: list.slice(0, 30) } : c);
 export const sec = (ms) => `${(ms / 1000).toFixed(1)} s`;
 const WEIGHT = { pass: 1, warn: 0.5, fail: 0 };
-export const scoreChecks = (checks) => Math.round((checks.reduce((s, c) => s + WEIGHT[c.status], 0) / checks.length) * 100);
+export const scoreChecks = (checks) => {
+  const measured = checks.filter((c) => c.verdict !== 'needs_validation');
+  return measured.length ? Math.round(measured.reduce((s, c) => s + WEIGHT[c.status], 0) / measured.length * 100) : 0;
+};
 export const BLOCKED_STATUS = BLOCKED;
 const baseDomain = (host) => host.replace(/^\./, '').split('.').slice(-2).join('.');
 
@@ -243,19 +248,19 @@ const baseDomain = (host) => host.replace(/^\./, '').split('.').slice(-2).join('
 function networkChecks(network) {
   const s4g = network.find((n) => n.id === 'slow4g' && !n.error);
   const g3 = network.find((n) => n.id === '3g' && !n.error);
-  const slow = (ms, good, bad) => (ms == null ? 'medium' : grade(ms, good, bad));
+  const slow = (ms, good, bad) => (ms == null ? 'unknown' : grade(ms, good, bad));
   const out = [];
   if (s4g) {
     out.push(
       check('network', 'net_fcp', 'First content on slow 4G', slow(s4g.fcp_ms, 3000, 6000),
-        s4g.fcp_ms == null ? 'Nothing visible within 45 s' : `Visitors see something after ${sec(s4g.fcp_ms)}`),
+        s4g.fcp_ms == null ? 'No reliable paint measurement; review the run' : `Visitors see something after ${sec(s4g.fcp_ms)}`),
       check('network', 'net_lcp', 'Main content on slow 4G', slow(s4g.lcp_ms, 4000, 10_000),
-        s4g.lcp_ms == null ? 'Does not appear within 45 s' : `Appears after ${sec(s4g.lcp_ms)} (good: under 4 s)`),
+        s4g.lcp_ms == null ? 'No reliable LCP measurement; review the run' : `Appears after ${sec(s4g.lcp_ms)} (good: under 4 s)`),
     );
   }
   if (g3) {
     out.push(check('network', 'net_3g', 'Usable on 3G', slow(g3.lcp_ms, 8000, 20_000),
-      g3.lcp_ms == null ? 'Main content does not appear within 45 s' : `Main content appears after ${sec(g3.lcp_ms)}`));
+      g3.lcp_ms == null ? 'No reliable LCP measurement; review the run' : `Main content appears after ${sec(g3.lcp_ms)}`));
   }
   if (!out.length) out.push(check('network', 'net_lcp', 'Main content on slow 4G', 'unknown', 'Could not simulate the connection'));
   return out;
@@ -324,10 +329,10 @@ function buildMap(pages) {
 }
 
 // Fresh context so the first-visit speed and cookies aren't hidden by a warm cache
-export async function inspectHome(browser, siteUrl) {
+export async function inspectHome(browser, siteUrl, options = {}) {
   const fresh = await browser.newContext();
   try {
-    const home = await inspectPage(fresh, siteUrl);
+    const home = await inspectPage(fresh, siteUrl, options);
     return { home, cookies: await fresh.cookies() };
   } finally {
     await fresh.close();
@@ -521,12 +526,17 @@ export async function buildOverview(context, siteUrl, pages, network = [], { ins
     ...networkChecks(network),
     ...complianceChecks(check, {
       legal: meta.legal, requests: home.requests, cookies, services: architecture.services,
-      forms: architecture.forms,
+      forms: architecture.forms, observation_ms: home.observation_ms,
       sales: type === 'Online store' ? 'goods'
         : type === 'Online services / subscriptions' || architecture.services.some((s) => s.category === 'Payments') ? 'services' : null,
     }),
   ].filter((c) => !partial || !SITE_WIDE.has(c.id));
 
+  for (let i = 0; i < checks.length; i++) {
+    const c = checks[i];
+    const resources = c.id === 'links' ? brokenLinks : c.id === 'images' ? brokenImages : c.id === 'js' ? jsErrors : c.id === 'mixed' ? home.insecure.map((url) => ({ url })) : [];
+    checks[i] = attachEvidence(c, { url: home.finalUrl, home, network, resources });
+  }
   const score = scoreChecks(checks);
 
   return validateOverview({
@@ -543,6 +553,7 @@ export async function buildOverview(context, siteUrl, pages, network = [], { ins
     score,
     pages_checked: pages.length,
     load_ms: load ?? null,
+    methodology: 'Lab observations from the worker location, not Lighthouse scores or real-user CrUX data. Overall score summarizes checks, not Core Web Vitals. No INP or inbox delivery measurement. Privacy checks are prompts for review, not legal advice.',
     network,
     checks,
     issues: {
@@ -553,5 +564,37 @@ export async function buildOverview(context, siteUrl, pages, network = [], { ins
     },
     map: buildMap(pages),
     architecture,
+  });
+}
+
+// Publish only completed checks; delayed content and consent stay out of this snapshot.
+export async function earlyOverview(page, response) {
+  const meta = await page.evaluate(() => ({
+    title: document.title.trim(),
+    description: document.querySelector('meta[name="description"]')?.content?.trim() ?? '',
+    viewport: !!document.querySelector('meta[name="viewport"]'),
+  }));
+  const url = page.url();
+  const headers = response?.headers() ?? {};
+  const status = response?.status() ?? null;
+  const blocked = BLOCKED.has(status);
+  const observed = new Date().toISOString();
+  const checks = blocked ? [] : [
+    check('availability', 'home', 'Page responds', status == null ? 'unknown' : status >= 400 ? 'high' : null, `HTTP ${status ?? 'unknown'}`),
+    check('availability', 'https', 'Secure connection (HTTPS)', url.startsWith('https:') ? null : 'high', url.startsWith('https:') ? 'The page uses HTTPS' : 'The page uses HTTP'),
+    check('security', 'nosniff', 'Content type protection', /nosniff/i.test(headers['x-content-type-options'] ?? '') ? null : 'hardening', `X-Content-Type-Options: ${headers['x-content-type-options'] ?? 'not present'}`),
+    check('security', 'hsts', 'HSTS (forces HTTPS)', headers['strict-transport-security'] ? null : 'hardening', `Strict-Transport-Security: ${headers['strict-transport-security'] ?? 'not present'}`),
+    check('security', 'csp', 'Content Security Policy', headers['content-security-policy'] ? null : 'hardening', headers['content-security-policy'] ? 'Content-Security-Policy is present' : 'Content-Security-Policy is not present'),
+    check('seo', 'title', 'Page title', meta.title ? null : 'unknown', meta.title || 'Not present yet; checking again after the page settles'),
+    check('seo', 'description', 'Description for Google', meta.description ? null : 'unknown', meta.description || 'Not present yet; checking again after the page settles'),
+    check('seo', 'viewport', 'Mobile viewport', meta.viewport ? null : 'unknown', meta.viewport ? 'Meta viewport is present' : 'Not present yet; checking again after the page settles'),
+  ].map((c) => attachEvidence(c, { url, observedAt: observed }));
+  return validateOverview({
+    schema_version: SCHEMA_VERSION, blocked, status, partial: true, stage: 'initial',
+    title: meta.title || new URL(url).host, description: meta.description, final_url: url,
+    platforms: [], type: null, score: blocked ? null : scoreChecks(checks), pages_checked: 1,
+    checks, issues: {}, map: { nodes: [], edges: [] },
+    architecture: { cdn: [], services: [], third_parties: [], apis: [], forms: [], cookies: [] },
+    methodology: 'Preliminary results: completed response and document checks only. Privacy, performance and other pages are still being checked. The score can change.',
   });
 }

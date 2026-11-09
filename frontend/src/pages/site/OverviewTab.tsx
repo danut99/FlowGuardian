@@ -1,3 +1,4 @@
+import { FindingEvidence } from '../../components/FindingEvidence'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Radar, StatusIcon } from '../../components/ui'
@@ -12,22 +13,23 @@ const CAP_MS = 45_000
 const barColor = (ms: number | null | undefined, good: number, ok: number) =>
   ms == null ? 'var(--bad)' : ms <= good ? 'var(--ok)' : ms <= ok ? 'var(--warn)' : 'var(--bad)'
 
-const lcpLabel = (ms: number | null | undefined) => (ms == null ? 'doesn\'t appear within 45 s' : `${(ms / 1000).toFixed(1)} s`)
+const lcpLabel = (ms: number | null | undefined) => (ms == null ? 'not measured reliably' : `${(ms / 1000).toFixed(1)} s`)
 
 function NetworkBars({ results }: { results: NetworkResult[] }) {
   const rows = results.filter((r) => !r.error)
   return (
     <div style={{ display: 'grid', gap: '0.9rem' }}>
-      <p className="muted small" style={{ margin: 0 }}>Simulated phone, slowed-down CPU. When the main content appears (LCP).</p>
+      <p className="muted small" style={{ margin: 0 }}>Lab measurements from our worker: simulated phone and 4x CPU slowdown. New scans use the median of three cold visits per profile. These are not real-user CrUX measurements or Lighthouse scores.</p>
       {rows.map((r) => {
         const ms = r.lcp_ms ?? null
         const pct = Math.min(100, ((ms ?? CAP_MS) / CAP_MS) * 100)
         return (
           <div key={r.id}>
             <div className="row small" style={{ marginBottom: '0.35rem' }}>
-              <span>{r.label}</span>
+              <span>{r.label}{r.runs ? ` / median of ${r.runs} runs (${r.successful_runs} completed)` : ' / single run'}</span>
               <span className="muted">{lcpLabel(ms)}{r.bytes ? ` · ${(r.bytes / 1e6).toFixed(1)} MB` : ''}</span>
             </div>
+            {r.lcp_element && <p className="muted small">LCP element: &lt;{r.lcp_element.tag}{r.lcp_element.id ? `#${r.lcp_element.id}` : ''}&gt; {r.lcp_element.resource}</p>}
             <div style={{ height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
               <motion.div
                 initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1.1, ease: 'easeOut' }}
@@ -49,7 +51,7 @@ const GROUPS: { id: CheckGroup; label: string; hint: string }[] = [
   { id: 'text', label: 'Text & content', hint: 'Typos, leftover text, broken characters, duplicates' },
   { id: 'seo', label: 'SEO & mobile', hint: 'How Google and phones see you' },
   { id: 'security', label: 'Security', hint: 'Configuration recommendations (not vulnerabilities)' },
-  { id: 'compliance', label: 'Legal compliance', hint: 'What data protection and consumer laws require in most countries' },
+  { id: 'compliance', label: 'Privacy & policy review', hint: 'Heuristic observations for review; not legal advice or compliance certification' },
 ]
 
 const worst = (statuses: CheckStatus[]): CheckStatus =>
@@ -70,12 +72,12 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
   const o = site.overview
   const scanning = site.scan_status === 'pending' || site.scan_status === 'scanning'
 
-  if (scanning && !o?.partial) {
+  if (scanning && !o) {
     return (
       <div className="card">
         <Radar label="Scanning the site…" />
         <p className="muted" style={{ textAlign: 'center', marginTop: '-1.5rem' }}>
-          We go through the pages, check links, speed, SEO and security, and simulate a slow connection. Takes about a minute.
+          We go through the pages, check links, speed, SEO and security, and simulate a slow connection. The full scan can take several minutes, including three visits per network profile.
         </p>
       </div>
     )
@@ -124,10 +126,11 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
+      {o.methodology && <p className="muted small">{o.methodology}</p>}
       {scanning && (
         <div className="notice-progress">
           <span className="spinner" />
-          <span>First results, from the home page. We're continuing with the other pages, text (typos, duplicates), links and slow connection — this updates by itself in ~2 minutes.</span>
+          <span>{!o.partial ? 'Updating the scan. The previous report stays visible until fresh results arrive.' : o.stage === 'initial' ? 'The page responded. First document and header checks are ready; observing privacy and performance next.' : 'Home page results are ready. Checking other pages, links and three visits per slow-network profile. Results update automatically.'}</span>
         </div>
       )}
       <motion.div className="summary" variants={stagger}>
@@ -295,8 +298,8 @@ function CheckRow({ c }: { c: Check }) {
         <div className="label">{c.label}</div>
         <div className="detail">
           {c.detail}
-          {c.verdict === 'needs_validation' && <span className="chip" style={{ marginLeft: '0.4rem' }}>not measured</span>}
         </div>
+        <FindingEvidence check={c} />
         {!!c.pages?.length && (
           <button className="fold" onClick={() => setShowPages(!showPages)}>
             <motion.span animate={{ rotate: showPages ? 90 : 0 }} style={{ display: 'inline-block' }}>›</motion.span>
@@ -323,8 +326,8 @@ function CheckRow({ c }: { c: Check }) {
             <motion.div
               className="help" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
             >
-              <p><b>Why it matters:</b> {help.why}</p>
-              {c.status !== 'pass' && <p><b>How to fix:</b> {help.fix}</p>}
+              <p><b>Why it matters:</b> {c.group === 'compliance' ? (c.evidence?.limitation ?? 'Automated review prompt; not legal advice or a compliance certification.') : help.why}</p>
+              {c.status !== 'pass' && <p><b>How to fix:</b> {c.evidence?.fix ?? help.fix}</p>}
             </motion.div>
           )}
         </AnimatePresence>

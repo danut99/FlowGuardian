@@ -20,13 +20,16 @@ export async function measure(browser, url, p) {
     });
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: p.cpu });
     await page.addInitScript(() => {
-      window.__fg = { fcp: null, lcp: null };
+      window.__fg = { fcp: null, lcp: null, lcp_element: null };
       new PerformanceObserver((l) => {
         for (const e of l.getEntries()) if (e.name === 'first-contentful-paint') window.__fg.fcp = e.startTime;
       }).observe({ type: 'paint', buffered: true });
       new PerformanceObserver((l) => {
         const es = l.getEntries();
-        window.__fg.lcp = es[es.length - 1].startTime;
+        const entry = es[es.length - 1];
+        window.__fg.lcp = entry.startTime;
+        const el = entry.element;
+        window.__fg.lcp_element = el ? { tag: el.tagName.toLowerCase(), id: el.id || null, resource: entry.url ? new URL(entry.url).origin + new URL(entry.url).pathname : null } : null;
       }).observe({ type: 'largest-contentful-paint', buffered: true });
     });
 
@@ -38,18 +41,44 @@ export async function measure(browser, url, p) {
     } catch {
       // Didn't finish loading within the cap; paint metrics may still exist
     }
+    await page.waitForTimeout(1000);
     const m = await page.evaluate(() => window.__fg).catch(() => null);
     return {
       id: p.id, label: p.label,
       fcp_ms: m?.fcp != null ? Math.round(m.fcp) : null,
       lcp_ms: m?.lcp != null ? Math.round(m.lcp) : null,
-      load_ms, bytes,
+      load_ms, bytes, lcp_element: m?.lcp_element ?? null,
     };
   } finally {
     await context.close();
   }
 }
 
+// Run sequentially so competing browsers do not distort the median.
+export function summarizeRuns(p, runs) {
+  const valid = runs.filter((r) => !r.error);
+  const median = (key) => {
+    const values = runs.map((r) => Number.isFinite(r[key]) ? r[key] : null);
+    if (values.filter((v) => v !== null).length < 2) return null;
+    return values.sort((a, b) => (a ?? Infinity) - (b ?? Infinity))[1];
+  };
+  const lcp = median('lcp_ms');
+  return {
+    id: p.id, label: p.label, source: 'lab', aggregation: 'median', runs: runs.length,
+    successful_runs: valid.length, error: valid.length < 2,
+    fcp_ms: median('fcp_ms'), lcp_ms: lcp, load_ms: median('load_ms'), bytes: median('bytes'),
+    lcp_element: runs.find((r) => r.lcp_ms === lcp)?.lcp_element ?? null,
+    samples: runs.map(({ fcp_ms, lcp_ms, load_ms, error }) => ({ fcp_ms, lcp_ms, load_ms, error })),
+    conditions: { viewport: '390x844', latency_ms: p.latency, download_bps: p.down * 8, cpu_slowdown: p.cpu },
+  };
+}
+
 export async function measureSlowNetwork(browser, url) {
-  return Promise.all(PROFILES.map((p) => measure(browser, url, p).catch(() => ({ id: p.id, label: p.label, error: true }))));
+  const results = [];
+  for (const p of PROFILES) {
+    const runs = [];
+    for (let i = 0; i < 3; i++) runs.push(await measure(browser, url, p).catch(() => ({ error: true })));
+    results.push(summarizeRuns(p, runs));
+  }
+  return results;
 }

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { fadeUp, stagger } from '../../components/motion'
 import { TEST_HELP } from '../../components/checkHelp'
 import { supabase } from '../../lib/supabase'
-import { FAILURE_LABEL, FailureDetails } from './FailureDetails'
+import { outcomeLabel, FailureDetails } from './FailureDetails'
 import { ExportButton } from './ExportButton'
 import { TestEditor } from './TestEditor'
 import type { TestDraft } from './TestEditor'
@@ -144,7 +144,7 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
         <div className="info">
           <h2 style={{ margin: 0 }}>
             {!active.length ? 'Setting up monitoring' : failing.length
-              ? `${failing.length} ${failing.length === 1 ? 'problem needs' : 'problems need'} attention`
+              ? `${failing.length} ${failing.length === 1 ? 'check needs' : 'checks need'} attention`
               : busy && !passing.length ? 'Checking the site…' : 'Everything works'}
           </h2>
           <p className="muted" style={{ margin: '0.2rem 0 0' }}>
@@ -266,14 +266,14 @@ function AttentionCard({ test, run, act }: { test: Test; run: Run; act: Act }) {
         <div style={{ minWidth: 0 }}>
           <div className="title">{test.name}</div>
           <div className="muted small">
-            {run.failure_kind ? FAILURE_LABEL[run.failure_kind] ?? run.failure_kind : 'Run error'} · {ago(run.created_at)}
+            {outcomeLabel(run)} · {ago(run.created_at)}
           </div>
         </div>
         <button className="btn sm" onClick={() => act(() => supabase.from('runs').insert({ test_id: test.id }))}>
           <PlayIcon /> Check again
         </button>
       </div>
-      {help && (
+      {help && run.debug?.outcome === 'confirmed' && (
         <div className="explain">
           <p><b>What we check:</b> {help.what}</p>
           <p><b>How to fix:</b> {help.fix}</p>
@@ -307,6 +307,7 @@ function TestTile({ test, runs, page, act, onEdit }: { test: Test; runs: Run[]; 
       <div className="muted small">
         {!test.essential_key && <span className={`kind kind-${test.kind}`}>{KIND[test.kind]}</span>}
         {page && <span className="chip" style={{ marginRight: '0.35rem' }}>{page}</span>}
+        {done && !isBusy(latest) && <span>{outcomeLabel(done)} · </span>}
         {state === 'running' ? 'Running now…' : done ? `Checked ${ago(done.created_at)}` : 'Not run yet'} · {frequency(test.frequency_minutes)}
         {test.status === 'paused' && ' · paused'}
       </div>

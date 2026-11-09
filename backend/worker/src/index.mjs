@@ -1,8 +1,8 @@
 import os from 'node:os';
+import { executeTest } from './execution.mjs';
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
-import { runSteps, StepFailure, STEP_TIMEOUT } from './runner.mjs';
 import { scanPage } from './scanner.mjs';
 import { crawlSite } from './crawler.mjs';
 import { buildOverview, inspectHome } from './overview.mjs';
@@ -10,7 +10,6 @@ import { ESSENTIALS, RETIRED_ESSENTIALS } from './health.mjs';
 import { measureSlowNetwork } from './network.mjs';
 import { analyzePage, deepAnalyze } from './pages.mjs';
 import { assertPublic, checkApi } from './api.mjs';
-import { watchPage } from './debug.mjs';
 import { assetChanges, compare, currentFingerprint, snapshot } from './deploys.mjs';
 import { aiEnabled } from './ai.mjs';
 import { answer } from './assistant.mjs';
@@ -29,25 +28,8 @@ const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const BUDGET_MS = Number(process.env.WORKER_BUDGET_MS ?? 10 * 60_000);
 // More parallel pages skews timings on a 2-CPU runner and looks like a bot to the site
 const PAGE_CONCURRENCY = 3;
-const SEVERITY = { selector_changed: 'maintenance', blocked: 'maintenance', real_bug: 'critical', timeout: 'critical' };
 
-async function attempt(browser, test) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  page.setDefaultTimeout(STEP_TIMEOUT);
-  const collectDebug = watchPage(page);
-  try {
-    return await runSteps(page, test.steps, test.site.url);
-  } catch (e) {
-    const failure = e instanceof StepFailure ? e : new StepFailure(null, null, e?.message ?? String(e));
-    // Some checks capture a purpose-made screenshot (e.g. mobile overflow highlighted)
-    const screenshot = failure.screenshot ?? await page.screenshot().catch(() => null);
-    const debug = await collectDebug().catch(() => null);
-    return { failure, screenshot, debug };
-  } finally {
-    await context.close();
-  }
-}
+
 
 async function finish(run, fields, started) {
   const { error } = await db.from('runs')
@@ -79,39 +61,42 @@ async function processRun(browser, run) {
   // Runs can be queued manually from the dashboard, so re-check ownership verification here.
   if (!test.site.verified_at) return finish(run, { status: 'error', error: 'Site not verified.' }, started);
 
-  let result = await attempt(browser, test);
-  if (result.failure?.kind === 'real_bug' || result.failure?.kind === 'timeout') {
-    result = await attempt(browser, test);
-  }
-
-  if (!result.failure) {
-    await finish(run, { status: 'passed' }, started);
-    if (result.drift) {
-      await openIncident(run, 'maintenance',
-        `${test.name}: step ${result.drift.position} only worked with a fallback selector.`, result.drift.locators);
+  const { attempts, result, decision } = await executeTest(browser, test);
+  const evidence = [];
+  for (const [index, item] of attempts.entries()) {
+    let screenshot_path = null;
+    if (item.screenshot) {
+      const path = `${test.id}/${run.id}-attempt-${index + 1}.png`;
+      const { error: uploadError } = await db.storage.from('screenshots').upload(path, item.screenshot, { contentType: 'image/png' });
+      if (uploadError) console.error(`Run ${run.id}: screenshot upload failed`, uploadError.message);
+      else screenshot_path = path;
     }
-    console.log(`PASS ${test.name}`);
-    return;
+    evidence.push({
+      number: index + 1, started_at: item.started_at, finished_at: item.finished_at,
+      kind: item.failure?.kind ?? null, failed_step: item.failure?.position ?? null,
+      error: item.failure?.message ?? null, passed: !item.failure,
+      screenshot_path, screenshot_available: Boolean(screenshot_path), debug: item.debug ?? null,
+    });
   }
-
   const f = result.failure;
-  let screenshot_path = null;
-  if (result.screenshot) {
-    const path = `${test.id}/${run.id}.png`;
-    const { error: upErr } = await db.storage.from('screenshots').upload(path, result.screenshot, { contentType: 'image/png' });
-    if (upErr) console.error(`Run ${run.id}: screenshot upload failed`, upErr.message);
-    else screenshot_path = path;
-  }
+  const debug = {
+    url: test.site.url, title: null, viewport: null, user_agent: null,
+    console: [], page_errors: [], network: [], captured_at: result.finished_at,
+    ...result.debug, outcome: decision.outcome, attempts: evidence,
+  };
   await finish(run, {
-    status: f.kind ? 'failed' : 'error',
-    failure_kind: f.kind,
-    failed_step: f.position,
-    error: f.message,
-    screenshot_path,
-    debug: result.debug ?? null,
+    status: decision.status, failure_kind: f?.kind ?? null,
+    failed_step: f?.position ?? null, error: f?.message ?? null,
+    screenshot_path: evidence.at(-1).screenshot_path, debug,
   }, started);
-  if (f.kind) await openIncident(run, SEVERITY[f.kind], `${test.name}: ${f.message}`, f.proposed);
-  console.log(`${f.kind ? 'FAIL' : 'ERROR'} ${test.name}: ${f.message}`);
+  if (decision.severity) {
+    await openIncident(run, decision.severity, `${test.name}: ${f.message}`, f.proposed);
+  } else if (!f && result.drift) {
+    await openIncident(run, 'maintenance',
+      `${test.name}: step ${result.drift.position} only worked with a fallback selector.`, result.drift.locators);
+  }
+  console.log(`${decision.outcome.toUpperCase()} ${test.name}${f ? `: ${f.message}` : ''}`);
+
 }
 
 async function ensureEssentialTests(site, overview) {
@@ -140,7 +125,12 @@ async function processScan(browser, site) {
   const context = await browser.newContext();
   try {
     // Home page first (~10 s) so the dashboard has results while the crawl runs
-    const inspected = await inspectHome(browser, site.url);
+    const inspected = await inspectHome(browser, site.url, { onEarly: async (overview) => {
+      if (!overview.blocked) {
+        const { error } = await db.from('sites').update({ overview }).eq('id', site.id);
+        if (error) throw error;
+      }
+    } });
     const quick = await buildOverview(context, site.url, [], [], { inspected, partial: true });
     if (!quick.blocked) await db.from('sites').update({ overview: quick }).eq('id', site.id);
     const [pages, network] = quick.blocked ? [[], []]
@@ -440,18 +430,8 @@ async function processAi(browser, req) {
   }
 }
 
-// Landing-page check without an account: home page only, and only a teaser is stored
-async function processPublicScan(browser, scan) {
-  const done = (fields) => db.from('public_scans').update(fields).eq('id', scan.id);
-  const context = await browser.newContext();
-  try {
-    await assertPublic(new URL(scan.url));
-    const inspected = await inspectHome(browser, scan.url);
-    const o = await buildOverview(context, scan.url, [], [], { inspected, partial: true });
-    if (o.blocked) {
-      await done({ status: 'error', error: `The site answered HTTP ${o.status}: it blocks automated visitors, so we can't check it.` });
-      return;
-    }
+
+function publicTeaser(o) {
     const issues = o.checks.filter((c) => c.status !== 'pass')
       .sort((a, b) => (a.status === 'fail' ? 0 : 1) - (b.status === 'fail' ? 0 : 1));
     const count = (list) => ({
@@ -460,16 +440,33 @@ async function processPublicScan(browser, scan) {
       pass: list.filter((c) => c.status === 'pass').length,
     });
     const groups = [...new Set(o.checks.map((c) => c.group))].map((g) => ({ id: g, ...count(o.checks.filter((c) => c.group === g)) }));
-    await done({
-      status: 'done',
-      teaser: {
-        title: o.title, icon: o.icon, type: o.type, platforms: o.platforms, score: o.score,
-        counts: count(o.checks), groups,
-        // Titles only; details, affected pages and fixes stay behind sign-up
-        top: issues.slice(0, 3).map((c) => ({ group: c.group, label: c.label, status: c.status })),
-        hidden: Math.max(0, issues.length - 3),
-      },
-    });
+  return {
+    partial: o.stage === 'initial',
+    title: o.title, icon: o.icon, type: o.type, platforms: o.platforms, score: o.score,
+    counts: count(o.checks), groups,
+    top: issues.slice(0, 3).map((c) => ({ group: c.group, label: c.label, status: c.status, detail: c.detail, verdict: c.verdict, evidence: c.evidence })),
+    hidden: Math.max(0, issues.length - 3),
+  };
+}
+
+// Landing-page check without an account: home page only, and only a teaser is stored
+async function processPublicScan(browser, scan) {
+  const done = (fields) => db.from('public_scans').update(fields).eq('id', scan.id);
+  const context = await browser.newContext();
+  try {
+    await assertPublic(new URL(scan.url));
+    const inspected = await inspectHome(browser, scan.url, { onEarly: async (o) => {
+      if (!o.blocked) {
+        const { error } = await done({ teaser: publicTeaser(o) });
+        if (error) throw error;
+      }
+    } });
+    const o = await buildOverview(context, scan.url, [], [], { inspected, partial: true });
+    if (o.blocked) {
+      await done({ status: 'error', error: `The site answered HTTP ${o.status}: it blocks automated visitors, so we can't check it.` });
+      return;
+    }
+    await done({ status: 'done', teaser: publicTeaser(o) });
     console.log(`PUBLIC ${scan.url}: score ${o.score}`);
   } catch (e) {
     await done({ status: 'error', error: (e?.message ?? String(e)).split('\n')[0].slice(0, 200) });

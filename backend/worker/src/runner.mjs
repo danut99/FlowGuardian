@@ -23,7 +23,7 @@ async function target(page, step) {
       'The element no longer matches the saved selector, but a similar one exists.',
       [similar, ...step.locators]);
   }
-  throw new StepFailure('real_bug', step.position, 'The element was not found on the page.');
+  throw new StepFailure('selector_changed', step.position, 'The saved element was not found. Review the test and page state before treating this as a site issue.');
 }
 
 async function runStep(page, step, site) {
@@ -51,7 +51,7 @@ async function runStep(page, step, site) {
     case 'check': {
       const problem = await runCheck(page, site, step.value);
       if (problem) {
-        const failure = new StepFailure('real_bug', step.position, problem.message);
+        const failure = new StepFailure(problem.kind, step.position, problem.message);
         failure.screenshot = problem.screenshot;
         throw failure;
       }
@@ -123,7 +123,7 @@ export async function runSteps(page, steps, siteUrl) {
     } catch (e) {
       if (e instanceof StepFailure) throw e;
       if (e?.name === 'TimeoutError') throw new StepFailure('timeout', step.position, e.message);
-      throw new StepFailure('real_bug', step.position, e?.message ?? String(e));
+      throw new StepFailure(null, step.position, e?.message ?? String(e));
     }
   }
   return { drift };

@@ -556,3 +556,33 @@ details summary::-webkit-details-marker { display: none; }
   .summary { grid-template-columns: 1fr; }
   .site-head { flex-wrap: wrap; }
 }
+
+/* Findings: a compact overview, with evidence available on demand. */
+.finding-evidence { margin-top: .65rem; font-size: .8rem; }
+.finding-meta { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .5rem; }
+.finding-verdict { display: inline-flex; align-items: center; gap: .4rem; font-size: .7rem; font-weight: 500; color: #b9c4d8; }
+.finding-verdict-dot { width: 5px; height: 5px; border-radius: 50%; background: #8293b5; }
+.finding-verdict.review { color: #e5c981; }
+.finding-verdict.review .finding-verdict-dot { background: #d6b766; }
+.finding-verdict.observed .finding-verdict-dot { background: var(--bad); }
+.finding-timestamp { color: var(--muted); font-size: .68rem; }
+.finding-disclosure { border-top: 1px solid var(--border); }
+.finding-disclosure > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; padding: .65rem 0 .1rem; color: #becafa; font-size: .75rem; }
+.finding-disclosure > summary::-webkit-details-marker { display: none; }
+.finding-disclosure > summary:hover { color: var(--text); }
+.finding-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
+.finding-disclosure > summary > span { font-size: 1rem; transition: transform .15s; }
+.finding-disclosure[open] > summary > span { transform: rotate(45deg); }
+.finding-body { display: grid; gap: 1rem; padding-top: 1rem; line-height: 1.65; color: var(--muted); overflow-wrap: anywhere; }
+.finding-section h4, .finding-limits h4 { margin: 0 0 .35rem; font-size: .73rem; font-weight: 600; color: var(--text); }
+.finding-body p { margin: 0; }
+.finding-body p + p { margin-top: .45rem; }
+.finding-url { display: block; font-size: .73rem; }
+.finding-target { display: block; margin-top: .5rem; padding: .4rem .55rem; border-radius: 5px; background: rgba(255,255,255,.04); font-size: .72rem; white-space: normal; }
+.finding-criterion { color: #aeb9cf; }
+.finding-fix { padding: .8rem; border-left: 2px solid var(--accent); background: rgba(109,124,255,.05); border-radius: 0 6px 6px 0; }
+.finding-fix h4 span { display: block; color: var(--muted); font-size: .65rem; font-weight: 400; margin-top: .15rem; }
+.finding-limits { padding-top: .8rem; border-top: 1px solid var(--border); font-size: .73rem; }
+.check { padding: .9rem; }
+.check .label { font-weight: 550; line-height: 1.45; }
+.check .detail { line-height: 1.55; margin-top: .35rem; }

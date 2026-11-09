@@ -1,3 +1,4 @@
+import { FindingEvidence } from '../../components/FindingEvidence'
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { supabase } from '../../lib/supabase'
@@ -189,7 +190,7 @@ function MiniCheck({ c }: { c: Check }) {
       <StatusIcon status={c.status} />
       <div style={{ minWidth: 0 }}>
         <div className="label">{c.label}</div>
-        <div className="detail">{c.detail}</div>
+        <div className="detail">{c.detail}</div><FindingEvidence check={c} />
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import { attachEvidence } from './evidence.mjs';
 // Per-page analysis. Stage 2 (automatic after the scan): speed, SEO and errors for every crawled page.
 // Stage 3 (on demand, one page): slow network, phone layout, load experience and screenshots.
 import { BLOCKED_STATUS, check, grade, inspectPage, scoreChecks, sec } from './overview.mjs';
@@ -49,7 +50,7 @@ export async function analyzePage(browser, row) {
 
       check('security', 'mixed', 'No insecure content', https && p.insecure.length ? 'low' : null,
         https && p.insecure.length ? `${p.insecure.length} ${p.insecure.length === 1 ? 'resource' : 'resources'} over http://` : 'OK'),
-    ]);
+    ].map((c) => attachEvidence(c, { url: p.finalUrl, home: p, resources: c.id === 'links' ? brokenLinks : c.id === 'images' ? p.broken_images : c.id === 'js' ? p.js_errors.map((message) => ({ message })) : [] })));
 
     return {
       score: scoreChecks(checks),

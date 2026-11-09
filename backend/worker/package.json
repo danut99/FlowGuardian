@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "benchmark": "node scripts/benchmark/run.mjs",
     "start": "node src/index.mjs",
     "dev": "node --env-file=../../.env src/index.mjs",
     "dev:loop": "while true; do npm run dev; sleep 15; done"

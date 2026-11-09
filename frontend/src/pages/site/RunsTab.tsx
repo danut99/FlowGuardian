@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { motion } from 'motion/react'
 import { StatusBadge } from '../../components/StatusBadge'
-import { FAILURE_LABEL, FailureDetails } from './FailureDetails'
+import { FAILURE_LABEL, FailureDetails, outcomeLabel } from './FailureDetails'
 import type { Run } from '../../types'
 
 export function RunsTab({ runs }: { runs: Run[] }) {
@@ -13,13 +13,13 @@ export function RunsTab({ runs }: { runs: Run[] }) {
         <thead><tr><th>Test</th><th>Status</th><th>Duration</th><th>Details</th><th>When</th></tr></thead>
         <tbody>
           {runs.map((r) => {
-            const failed = r.status === 'failed' || r.status === 'error'
+            const failed = r.status === 'failed' || r.status === 'error' || (r.debug?.attempts?.length ?? 0) > 1
             return (
               <Fragment key={r.id}>
                 <motion.tr layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className={failed ? 'clickable' : undefined} onClick={failed ? () => setOpen(open === r.id ? null : r.id) : undefined}>
                   <td>{r.test.name}</td>
-                  <td><StatusBadge status={r.status} /></td>
+                  <td>{r.debug?.outcome ? <span className={`badge badge-${r.status}`}>{outcomeLabel(r)}</span> : <StatusBadge status={r.status} />}</td>
                   <td className="muted">{r.duration_ms != null ? `${(r.duration_ms / 1000).toFixed(1)} s` : '—'}</td>
                   <td className="muted small">
                     {r.error ?? (r.failure_kind ? FAILURE_LABEL[r.failure_kind] : '')}

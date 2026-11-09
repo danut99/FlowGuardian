@@ -21,7 +21,7 @@ const TRACKING_COOKIE = /^(_ga|_gid|_gat|_gcl_|_fbp|_fbc|_tt_|_ttp|_hj|_clck|_cl
 const find = (links, re) => links.find((l) => (l.text.length <= 50 && re.test(l.text)) || re.test(new URL(l.href, 'https://x').pathname));
 
 // sales: 'goods' (cart, physical products) | 'services' (subscriptions/payments, no cart) | null (doesn't sell online)
-export function complianceChecks(check, { legal, requests, cookies, services, forms, sales }) {
+export function complianceChecks(check, { legal, requests, cookies, services, forms, sales, observation_ms = 0 }) {
   // Some sites open legal pages from buttons/modals instead of links
   const links = [...(legal?.links ?? []), ...(legal?.buttons ?? []).map((text) => ({ text, href: 'https://x/' }))];
   const buttons = legal?.buttons ?? [];
@@ -46,7 +46,7 @@ export function complianceChecks(check, { legal, requests, cookies, services, fo
       privacy ? linkNote(privacy) : `No link to it found${collectsData ? ', even though the site collects data (forms or tracking)' : ''}`),
     check('compliance', 'consent', 'Consent for tracking cookies',
       !tracks ? null : banner ? null : 'medium',
-      !tracks ? 'No analytics or marketing cookies found, so no banner is needed'
+      !tracks ? 'No known tracking signals observed; consent requirements were not established'
         : banner ? `There is a consent banner${cmp ? ' (consent platform detected)' : ''}`
           : `Uses ${[...trackers, ...trackingCookies].slice(0, 3).join(', ')}, but no banner asking for consent was found`),
   ];
@@ -60,10 +60,10 @@ export function complianceChecks(check, { legal, requests, cookies, services, fo
   }
   if (tracks) {
     out.push(check('compliance', 'tracking_before_consent', 'No tracking before consent',
-      trackingCookies.length ? 'medium' : null,
+      'unknown',
       trackingCookies.length
-        ? `On the first visit, before any click, these are already set: ${trackingCookies.slice(0, 5).join(', ')}`
-        : 'No tracking cookies are set before consent'));
+        ? `Before any click, known tracking cookie names were observed (review purpose and configuration): ${trackingCookies.slice(0, 5).join(', ')}`
+        : 'No known tracking cookies observed in this visit. Cookieless requests and delayed scripts still need review.'));
     out.push(check('compliance', 'cookie_policy', 'Cookie policy',
       cookiePolicy || privacy ? null : 'low',
       cookiePolicy ? linkNote(cookiePolicy) : privacy ? 'Probably included in the privacy policy' : 'No link to it found'));
@@ -93,5 +93,5 @@ export function complianceChecks(check, { legal, requests, cookies, services, fo
   const a11y = find(links, A11Y);
   out.push(check('compliance', 'a11y_statement', 'Accessibility statement',
     a11y ? null : sales ? 'low' : 'hardening', a11y ? linkNote(a11y) : 'No link to it found'));
-  return out;
+  return out.map((c) => c.status === 'pass' ? c : { ...c, verdict: 'needs_validation', status: 'warn', severity: undefined });
 }

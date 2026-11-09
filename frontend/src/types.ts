@@ -12,6 +12,7 @@ export type Check = {
   // Absent on reports saved before schema v1
   verdict?: Verdict
   severity?: Severity
+  evidence?: { url: string; observed_at: string; observation: string; reproduce: string; target?: string; expected?: string; fix?: string; limitation?: string; affected?: { url: string; note: string }[]; resources?: { url?: string; message?: string; status?: number }[] }
   // Pages a site-wide check is about (only on failing checks)
   pages?: { url: string; note: string }[]
 }
@@ -40,6 +41,9 @@ export type Architecture = {
 }
 
 export type NetworkResult = {
+  runs?: number
+  successful_runs?: number
+  lcp_element?: { tag: string; id: string | null; resource: string | null } | null
   id: string
   label: string
   fcp_ms?: number | null
@@ -50,6 +54,8 @@ export type NetworkResult = {
 }
 
 export type Overview = {
+  stage?: 'initial'
+  methodology?: string
   network?: NetworkResult[]
   blocked: boolean
   partial?: boolean
@@ -172,6 +178,19 @@ export type Run = {
 }
 
 export type RunDebug = {
+  outcome?: 'passed' | 'confirmed' | 'inconclusive' | 'blocked' | 'maintenance'
+  attempts?: {
+    number: number
+    started_at: string
+    finished_at: string
+    kind: string | null
+    failed_step: number | null
+    error: string | null
+    passed: boolean
+    screenshot_path: string | null
+    screenshot_available: boolean
+    debug: RunDebug | null
+  }[]
   url: string
   title: string | null
   viewport: { width: number; height: number } | null
