@@ -9,7 +9,7 @@ import { buildOverview, inspectHome } from './overview.mjs';
 import { ESSENTIALS, RETIRED_ESSENTIALS } from './health.mjs';
 import { measureSlowNetwork } from './network.mjs';
 import { analyzePage, deepAnalyze } from './pages.mjs';
-import { checkApi } from './api.mjs';
+import { assertPublic, checkApi } from './api.mjs';
 import { watchPage } from './debug.mjs';
 import { assetChanges, compare, currentFingerprint, snapshot } from './deploys.mjs';
 import { aiEnabled } from './ai.mjs';
@@ -440,6 +440,45 @@ async function processAi(browser, req) {
   }
 }
 
+// Landing-page check without an account: home page only, and only a teaser is stored
+async function processPublicScan(browser, scan) {
+  const done = (fields) => db.from('public_scans').update(fields).eq('id', scan.id);
+  const context = await browser.newContext();
+  try {
+    await assertPublic(new URL(scan.url));
+    const inspected = await inspectHome(browser, scan.url);
+    const o = await buildOverview(context, scan.url, [], [], { inspected, partial: true });
+    if (o.blocked) {
+      await done({ status: 'error', error: `The site answered HTTP ${o.status}: it blocks automated visitors, so we can't check it.` });
+      return;
+    }
+    const issues = o.checks.filter((c) => c.status !== 'pass')
+      .sort((a, b) => (a.status === 'fail' ? 0 : 1) - (b.status === 'fail' ? 0 : 1));
+    const count = (list) => ({
+      fail: list.filter((c) => c.status === 'fail').length,
+      warn: list.filter((c) => c.status === 'warn').length,
+      pass: list.filter((c) => c.status === 'pass').length,
+    });
+    const groups = [...new Set(o.checks.map((c) => c.group))].map((g) => ({ id: g, ...count(o.checks.filter((c) => c.group === g)) }));
+    await done({
+      status: 'done',
+      teaser: {
+        title: o.title, icon: o.icon, type: o.type, platforms: o.platforms, score: o.score,
+        counts: count(o.checks), groups,
+        // Titles only; details, affected pages and fixes stay behind sign-up
+        top: issues.slice(0, 3).map((c) => ({ group: c.group, label: c.label, status: c.status })),
+        hidden: Math.max(0, issues.length - 3),
+      },
+    });
+    console.log(`PUBLIC ${scan.url}: score ${o.score}`);
+  } catch (e) {
+    await done({ status: 'error', error: (e?.message ?? String(e)).split('\n')[0].slice(0, 200) });
+    console.log(`PUBLIC ERROR ${scan.url}: ${e?.message ?? e}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   // interactive: only claim queued jobs. Scheduling and maintenance stay in the single scheduled worker so parallel runs don't duplicate them.
   const full = process.env.WORKER_MODE !== 'interactive';
@@ -459,6 +498,8 @@ async function main() {
     // Someone is waiting on these: chat, new-site scans and test runs go first, and again between every background job.
     // Test runs take seconds each, so scheduled ones riding along with "Rulează" clicks cost little.
     const interactive = async () => {
+      await drain('claim_next_public_scan', deadline, (s) => processPublicScan(browser, s))
+        .catch((e) => console.error('Public checks failed:', e?.message ?? e));
       await drain('claim_next_ai', deadline, (r) => processAi(browser, r));
       await drain('claim_next_scan', deadline, (s) => processScan(browser, s));
       await drain('claim_next_run', deadline, (r) => processRun(browser, r));
@@ -473,8 +514,9 @@ async function main() {
   }
 }
 
-// Most urgent first: someone is waiting on chat, scans and test runs
+// Most urgent first: someone is waiting on landing-page checks, chat, scans and test runs
 const QUEUES = [
+  ['claim_next_public_scan', processPublicScan],
   ['claim_next_ai', processAi], ['claim_next_scan', processScan], ['claim_next_run', processRun],
   ['claim_next_deep', processDeep], ['claim_next_pages', processPages], ['claim_next_suggest', processSuggest],
 ];
@@ -494,6 +536,7 @@ async function maintain(browser, last) {
     last.cleanup = now;
     await cleanupOrphanScreenshots();
     await cleanupOrphanPageShots();
+    await db.from('public_scans').delete().lt('created_at', new Date(now - 7 * 86_400_000).toISOString());
   }
 }
 
@@ -518,7 +561,11 @@ async function daemon() {
   const takeOne = async () => {
     for (const [rpc, handle] of QUEUES) {
       const { data, error } = await db.rpc(rpc);
-      if (error) throw error;
+      // One broken queue (e.g. a migration not applied yet) must not stop the others
+      if (error) {
+        console.error(`${rpc}:`, error.message);
+        continue;
+      }
       if (data?.[0]) {
         wakeAll();
         await handle(await getBrowser(), data[0]);

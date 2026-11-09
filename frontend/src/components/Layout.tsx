@@ -3,6 +3,8 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { supabase } from '../lib/supabase'
 import { useDevMode } from '../lib/devMode'
+import { unlimited, usePlan } from '../lib/plan'
+import { LockIcon } from './icons'
 
 const MODULES = [
   { to: '/', label: 'Website Tester', match: (p: string) => p === '/' || p.startsWith('/sites') },
@@ -13,6 +15,7 @@ const MODULES = [
 export function Layout({ email, children }: { email?: string; children: ReactNode }) {
   const { pathname } = useLocation()
   const [dev, setDev] = useDevMode()
+  const plan = usePlan()
   return (
     <div className="app">
       <header className="topbar">
@@ -31,6 +34,7 @@ export function Layout({ email, children }: { email?: string; children: ReactNod
               <NavLink key={m.to} to={m.to} className={`module-link${active ? ' active' : ''}`}>
                 {active && <motion.div layoutId="module-pill" className="module-pill" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                 <span>{m.label}</span>
+                {m.to === '/api' && plan && !plan.api_guardian && <LockIcon />}
                 {m.soon && <em className="soon">soon</em>}
               </NavLink>
             )
@@ -40,6 +44,11 @@ export function Layout({ email, children }: { email?: string; children: ReactNod
           <button className={`dev-toggle${dev ? ' on' : ''}`} onClick={() => setDev(!dev)} title="Show technical details: stack traces, failed requests, Playwright export">
             <span className="dev-switch"><motion.span layout className="dev-knob" /></span> Developer mode
           </button>
+          {plan && (
+            <span className="chip accent plan-chip" title={unlimited(plan.max_sites) ? 'No limits' : `${plan.sites}/${plan.max_sites} websites · ${plan.ai_tests}/${plan.max_ai_tests} AI tests`}>
+              {unlimited(plan.max_sites) ? `${plan.label} · unlimited` : <>{plan.label} · {plan.sites}/{plan.max_sites} site{plan.max_sites === 1 ? '' : 's'} · {plan.ai_tests}/{plan.max_ai_tests} AI test{plan.max_ai_tests === 1 ? '' : 's'}</>}
+            </span>
+          )}
           <span className="muted small">{email}</span>
           <button className="btn ghost sm" onClick={() => supabase.auth.signOut()}>Sign out</button>
         </div>

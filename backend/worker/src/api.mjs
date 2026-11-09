@@ -26,7 +26,7 @@ function privateIp(ip) {
 }
 
 // The worker runs inside cloud infrastructure: never let a user point it at internal addresses
-async function assertPublic(url) {
+export async function assertPublic(url) {
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const ips = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true })).map((a) => a.address);
   if (!ips.length || ips.some(privateIp)) throw new Error('The address points to a private network and cannot be checked.');

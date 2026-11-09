@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { supabase } from '../../lib/supabase'
+import { planChanged, unlimited, usePlan } from '../../lib/plan'
 import type { Locator, Site } from '../../types'
 import type { TestDraft } from './TestEditor'
 
@@ -48,6 +49,8 @@ export function AiAssistant({ site, pageOptions, pageLabel, onEdit, onSaved }: {
   const [saved, setSaved] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  const plan = usePlan()
+  const aiUsedUp = !!plan && plan.ai_tests >= plan.max_ai_tests
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('ai_requests').select('*').eq('site_id', site.id)
@@ -83,10 +86,11 @@ export function AiAssistant({ site, pageOptions, pageLabel, onEdit, onSaved }: {
     if (!r.draft) return
     const { error } = await supabase.rpc('save_test', {
       sid: site.id, tid: null, tname: r.draft.name, tkind: r.draft.kind, freq: 1440,
-      purl: r.draft.page_url === site.url ? null : r.draft.page_url, steps: r.draft.steps,
+      purl: r.draft.page_url === site.url ? null : r.draft.page_url, steps: r.draft.steps, ai: true,
     })
     if (error) return setError(error.message)
     setSaved((s) => new Set(s).add(r.id))
+    planChanged()
     onSaved()
   }
 
@@ -95,6 +99,7 @@ export function AiAssistant({ site, pageOptions, pageLabel, onEdit, onSaved }: {
       <h2 style={{ margin: 0 }}>Describe the test, we'll build it</h2>
       <p className="muted" style={{ margin: '0.3rem 0 0.8rem' }}>
         Write the steps in your own words. We open the page, find the elements and try the test before showing it to you.
+        {plan && !unlimited(plan.max_ai_tests) && <> <span className="chip">AI tests: {plan.ai_tests}/{plan.max_ai_tests}</span></>}
       </p>
 
       {reqs.length > 0 && (
@@ -139,7 +144,7 @@ export function AiAssistant({ site, pageOptions, pageLabel, onEdit, onSaved }: {
                             <button className="btn ghost sm" onClick={() => onEdit(r.draft!)}>Edit</button>
                             {saved.has(r.id)
                               ? <span className="badge badge-approved">saved ✓</span>
-                              : <button className="btn sm" onClick={() => save(r)}>Save and monitor</button>}
+                              : <button className="btn sm" disabled={aiUsedUp} title={aiUsedUp ? 'Your plan’s AI test is already used' : undefined} onClick={() => save(r)}>Save and monitor</button>}
                           </div>
                         </div>
                       )}
@@ -152,22 +157,31 @@ export function AiAssistant({ site, pageOptions, pageLabel, onEdit, onSaved }: {
         </div>
       )}
 
-      <div className="ai-examples">
-        {EXAMPLES.map((e) => <button key={e} className="chip" onClick={() => setMsg(e)}>{e}</button>)}
-      </div>
-      <div className="ai-input">
-        <select value={page} onChange={(e) => setPage(e.target.value)} title="Which page">
-          {pageOptions.map((u) => <option key={u} value={u}>{pageLabel(u)}</option>)}
-        </select>
-        <textarea
-          rows={2} maxLength={1000} value={msg} placeholder="E.g. type “shoes” in the search box, press Enter and check that results appear"
-          onChange={(e) => setMsg(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-        />
-        <button className="btn" disabled={sending || thinking || msg.trim().length < 3} onClick={send}>
-          {sending || thinking ? <span className="spinner" /> : 'Create'}
-        </button>
-      </div>
+      {aiUsedUp ? (
+        <div className="card plan-limit">
+          <b>Your {plan!.label} includes {plan!.max_ai_tests} test{plan!.max_ai_tests === 1 ? '' : 's'} written with AI, and it’s in use.</b>
+          <span className="muted"> You can still create tests by hand with “+ New test”. More AI tests come with paid plans.</span>
+        </div>
+      ) : (
+        <>
+          <div className="ai-examples">
+            {EXAMPLES.map((e) => <button key={e} className="chip" onClick={() => setMsg(e)}>{e}</button>)}
+          </div>
+          <div className="ai-input">
+            <select value={page} onChange={(e) => setPage(e.target.value)} title="Which page">
+              {pageOptions.map((u) => <option key={u} value={u}>{pageLabel(u)}</option>)}
+            </select>
+            <textarea
+              rows={2} maxLength={1000} value={msg} placeholder="E.g. type “shoes” in the search box, press Enter and check that results appear"
+              onChange={(e) => setMsg(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+            />
+            <button className="btn" disabled={sending || thinking || msg.trim().length < 3} onClick={send}>
+              {sending || thinking ? <span className="spinner" /> : 'Create'}
+            </button>
+          </div>
+        </>
+      )}
       {error && <p className="notice error">{error}</p>}
     </div>
   )

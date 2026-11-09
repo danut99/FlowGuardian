@@ -6,11 +6,7 @@ import { supabase } from '../lib/supabase'
 import { Favicon, ScoreRing } from '../components/ui'
 import { fadeUp, stagger } from '../components/motion'
 import type { Site } from '../types'
-
-function normalizeUrl(input: string) {
-  const trimmed = input.trim()
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
-}
+import { normalizeUrl, planChanged, usePlan } from '../lib/plan'
 
 export function Sites() {
   const [sites, setSites] = useState<Site[]>([])
@@ -18,6 +14,8 @@ export function Sites() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const plan = usePlan()
+  const atLimit = !!plan && sites.length >= plan.max_sites
   async function load() {
     const { data, error } = await supabase.from('sites').select('*').order('created_at', { ascending: false })
     if (error) setError(error.message)
@@ -37,10 +35,8 @@ export function Sites() {
   async function addSite(e: FormEvent) {
     e.preventDefault()
     setError(null)
-    let parsed: URL
-    try {
-      parsed = new URL(normalizeUrl(url))
-    } catch {
+    const parsed = normalizeUrl(url)
+    if (!parsed) {
       setError('Invalid URL.')
       return
     }
@@ -48,6 +44,7 @@ export function Sites() {
     const { data, error } = await supabase.from('sites')
       .insert({ url: parsed.href, name: parsed.host }).select('id').single()
     setBusy(false)
+    planChanged()
     if (error) setError(error.message)
     else navigate(`/sites/${data.id}`)
   }
@@ -56,7 +53,10 @@ export function Sites() {
     if (!confirm(`Delete ${s.name ?? s.url}? Its tests, runs and reports will be deleted too.`)) return
     const { error } = await supabase.from('sites').delete().eq('id', s.id)
     if (error) setError(error.message)
-    else setSites((prev) => prev.filter((x) => x.id !== s.id))
+    else {
+      setSites((prev) => prev.filter((x) => x.id !== s.id))
+      planChanged()
+    }
   }
 
   return (
@@ -69,12 +69,19 @@ export function Sites() {
         <motion.p variants={fadeUp} className="muted">
           We check availability, speed, links, SEO and security. Then we keep monitoring your site.
         </motion.p>
-        <motion.form variants={fadeUp} className="url-form" onSubmit={addSite}>
-          <input placeholder="my-store.com" value={url} onChange={(e) => setUrl(e.target.value)} required />
-          <motion.button className="btn" disabled={busy} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            {busy ? <span className="spinner" /> : null} Analyze
-          </motion.button>
-        </motion.form>
+        {atLimit ? (
+          <motion.div variants={fadeUp} className="card plan-limit">
+            <b>Your {plan!.label} includes {plan!.max_sites} website{plan!.max_sites === 1 ? '' : 's'}.</b>
+            <span className="muted"> To check a different site, delete the current one below. More websites come with paid plans.</span>
+          </motion.div>
+        ) : (
+          <motion.form variants={fadeUp} className="url-form" onSubmit={addSite}>
+            <input placeholder="my-store.com" value={url} onChange={(e) => setUrl(e.target.value)} required />
+            <motion.button className="btn" disabled={busy} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+              {busy ? <span className="spinner" /> : null} Analyze
+            </motion.button>
+          </motion.form>
+        )}
         {error && <p className="notice error">{error}</p>}
         <motion.div variants={fadeUp} className="hero-chips">
           {['Availability', 'Speed', 'Broken links', 'SEO & mobile', 'Security'].map((c) => (

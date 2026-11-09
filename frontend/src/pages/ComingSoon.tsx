@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
 import { fadeUp, stagger } from '../components/motion'
+import { LockIcon } from '../components/icons'
 
 const CONTENT = {
   api: {
@@ -24,11 +25,11 @@ const CONTENT = {
   },
 } as const
 
-export function ComingSoon({ module }: { module: keyof typeof CONTENT }) {
+export function ComingSoon({ module, locked }: { module: keyof typeof CONTENT; locked?: boolean }) {
   const c = CONTENT[module]
   return (
     <motion.div className="coming" variants={stagger} initial="hidden" animate="show">
-      <motion.span variants={fadeUp} className="chip accent">Coming soon</motion.span>
+      <motion.span variants={fadeUp} className="chip accent">{locked ? <><LockIcon /> Not included in the free trial</> : 'Coming soon'}</motion.span>
       <motion.h1 variants={fadeUp} className="gradient-text" style={{ fontSize: '2.4rem', marginTop: '1rem' }}>{c.title}</motion.h1>
       <motion.p variants={fadeUp} className="muted" style={{ fontSize: '1.05rem' }}>{c.tagline}</motion.p>
       <motion.div className="feature-grid" variants={stagger}>
@@ -39,6 +40,7 @@ export function ComingSoon({ module }: { module: keyof typeof CONTENT }) {
           </motion.div>
         ))}
       </motion.div>
+      {locked && <motion.p variants={fadeUp} className="muted" style={{ marginTop: '1.5rem' }}>API Guardian comes with paid plans.</motion.p>}
     </motion.div>
   )
 }
