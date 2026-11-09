@@ -87,13 +87,15 @@ async function checkPage(context, url, host) {
   }
 }
 
-async function linkStatus(context, url) {
+const TIMED_OUT = -1;
+
+async function linkStatus(context, url, timeout = 8_000) {
   try {
-    let res = await context.request.head(url, { timeout: 8_000, maxRedirects: 5 });
-    if (res.status() === 405 || res.status() === 501) res = await context.request.get(url, { timeout: 8_000, maxRedirects: 5 });
+    let res = await context.request.head(url, { timeout, maxRedirects: 5 });
+    if (res.status() === 405 || res.status() === 501) res = await context.request.get(url, { timeout, maxRedirects: 5 });
     return res.status();
-  } catch {
-    return 0;
+  } catch (e) {
+    return /timeout/i.test(e?.message ?? '') ? TIMED_OUT : 0;
   }
 }
 
@@ -123,12 +125,21 @@ export async function crawlSite(context, siteUrl) {
     }
   }
 
-  // Links we found but did not crawl still get a cheap status check
-  const status = new Map(results.map((r) => [r.url, r.http_status ?? 0]));
-  const unchecked = [...new Set(results.flatMap((r) => r.links))].filter((l) => !status.has(l)).slice(0, MAX_LINK_CHECKS);
+  // Links we found but did not crawl still get a cheap status check.
+  // Crawled pages that failed without an HTTP status (usually a slow load) are rechecked too, not assumed dead.
+  const status = new Map(results.filter((r) => r.http_status != null).map((r) => [r.url, r.http_status]));
+  const unchecked = [...new Set(results.flatMap((r) => [r.url, ...r.links]))].filter((l) => !status.has(l)).slice(0, MAX_LINK_CHECKS);
   const codes = await pool(unchecked, LINK_CONCURRENCY, (l) => linkStatus(context, l));
   unchecked.forEach((l, i) => status.set(l, codes[i]));
-  // Auth/bot-protection statuses aren't proof of a dead link; skip them to avoid false alarms
+  // Slow or overloaded servers (SSR, small hosts) time out or answer 502/503 under parallel checks: retry those slowly before calling them broken
+  const transient = (s) => s === TIMED_OUT || s === 429 || (s >= 500 && s <= 599);
+  const slow = unchecked.filter((l) => transient(status.get(l)));
+  const retried = await pool(slow, 2, async (l) => {
+    await new Promise((r) => setTimeout(r, 500));
+    return linkStatus(context, l, 25_000);
+  });
+  slow.forEach((l, i) => status.set(l, retried[i]));
+  // Auth/bot-protection statuses aren't proof of a dead link, and a link that's only slow isn't dead either
   const broken = (s) => s === 0 || (s >= 400 && ![401, 403, 405, 429].includes(s));
 
   const crawled = new Set(results.map((r) => r.url));
