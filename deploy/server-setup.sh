@@ -43,12 +43,14 @@ if [[ ! -f $ENV_FILE ]]; then
   read -rsp "SUPABASE_SERVICE_ROLE_KEY (nu se afișează): " SUPABASE_SERVICE_ROLE_KEY < /dev/tty; echo
   read -rsp "GEMINI_API_KEY (opțional, Enter pentru a sări): " GEMINI_API_KEY < /dev/tty; echo
   umask 077
+  # Each job runs its own Chromium; small servers (1 OCPU = 2 vCPU) get 2 at a time
+  SLOTS=$(( $(nproc) >= 4 ? 3 : 2 ))
   cat > "$ENV_FILE" <<EOF
 SUPABASE_URL=$SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
 GEMINI_API_KEY=$GEMINI_API_KEY
 WORKER_MODE=daemon
-WORKER_SLOTS=3
+WORKER_SLOTS=$SLOTS
 EOF
   chown root:flowguardian "$ENV_FILE"
   chmod 640 "$ENV_FILE"
