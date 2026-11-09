@@ -1,15 +1,28 @@
 name: Run tests
+# Shown in the Actions list: "Analiză site · exemplu.ro", "Teste (11) · exemplu.ro", "Verificare programată"
+run-name: ${{ inputs.reason || (github.event_name == 'schedule' && 'Verificare programată' || format('Rulare manuală ({0})', inputs.mode)) }}
 
 on:
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'interactive = only queued jobs; full = also schedule tests, API monitors, deploy checks'
+        type: choice
+        options: [interactive, full]
+        default: interactive
+      reason:
+        description: 'Run name (set automatically when the app starts a worker)'
+        type: string
+        required: false
 
 permissions:
   contents: read
 
+# Scheduled runs (maintenance) never overlap; each dispatched run gets its own group, so users' jobs run in parallel
 concurrency:
-  group: worker
+  group: ${{ github.event_name == 'schedule' && 'worker-scheduled' || format('worker-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
@@ -33,3 +46,4 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          WORKER_MODE: ${{ github.event_name == 'schedule' && 'full' || inputs.mode || 'interactive' }}

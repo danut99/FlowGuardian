@@ -438,13 +438,17 @@ async function processAi(browser, req) {
 }
 
 async function main() {
-  const { data: queued, error } = await db.rpc('enqueue_due_runs');
-  if (error) throw error;
-  if (queued) console.log(`Enqueued ${queued} due runs`);
-  await cleanupOrphanScreenshots().catch((e) => console.error('Cleanup failed:', e?.message ?? e));
-  await cleanupOrphanPageShots().catch((e) => console.error('Cleanup failed:', e?.message ?? e));
-  // Plain HTTP, no browser: run first so API checks keep their schedule even when browser jobs are slow
-  await runApiMonitors().catch((e) => console.error('API Guardian failed:', e?.message ?? e));
+  // interactive: only claim queued jobs. Scheduling and maintenance stay in the single scheduled worker so parallel runs don't duplicate them.
+  const full = process.env.WORKER_MODE !== 'interactive';
+  if (full) {
+    const { data: queued, error } = await db.rpc('enqueue_due_runs');
+    if (error) throw error;
+    if (queued) console.log(`Enqueued ${queued} due runs`);
+    await cleanupOrphanScreenshots().catch((e) => console.error('Cleanup failed:', e?.message ?? e));
+    await cleanupOrphanPageShots().catch((e) => console.error('Cleanup failed:', e?.message ?? e));
+    // Plain HTTP, no browser: run first so API checks keep their schedule even when browser jobs are slow
+    await runApiMonitors().catch((e) => console.error('API Guardian failed:', e?.message ?? e));
+  }
 
   const browser = await chromium.launch();
   const deadline = Date.now() + BUDGET_MS;
@@ -457,7 +461,7 @@ async function main() {
       await drain('claim_next_run', deadline, (r) => processRun(browser, r));
     };
     await interactive();
-    await checkDeploys(browser).catch((e) => console.error('Deploy detection failed:', e?.message ?? e));
+    if (full) await checkDeploys(browser).catch((e) => console.error('Deploy detection failed:', e?.message ?? e));
     await drain('claim_next_deep', deadline, (p) => processDeep(browser, p), interactive);
     await drain('claim_next_pages', deadline, (s) => processPages(browser, s), interactive);
     await drain('claim_next_suggest', deadline, (s) => processSuggest(browser, s), interactive);
