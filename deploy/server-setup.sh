@@ -21,6 +21,8 @@ if ! node --version 2>/dev/null | grep -q '^v22'; then
 fi
 
 id flowguardian &>/dev/null || useradd --system --create-home --shell /usr/sbin/nologin flowguardian
+# The updater runs as root on a checkout owned by the worker user
+git config --system --get-all safe.directory | grep -qx "$DIR" || git config --system --add safe.directory "$DIR"
 
 echo "==> Cod din GitHub"
 if [[ -d $DIR/.git ]]; then

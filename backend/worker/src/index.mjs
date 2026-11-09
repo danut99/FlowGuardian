@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
@@ -143,7 +144,9 @@ async function processScan(browser, site) {
     const quick = await buildOverview(context, site.url, [], [], { inspected, partial: true });
     if (!quick.blocked) await db.from('sites').update({ overview: quick }).eq('id', site.id);
     const [pages, network] = quick.blocked ? [[], []]
-      : await Promise.all([crawlSite(context, site.url), measureSlowNetwork(browser, site.url)]);
+      // On small servers the throttled phone runs would starve the crawl (and skew both timings)
+      : os.cpus().length >= 4 ? await Promise.all([crawlSite(context, site.url), measureSlowNetwork(browser, site.url)])
+        : [await crawlSite(context, site.url), await measureSlowNetwork(browser, site.url)];
     const overview = quick.blocked ? quick : await buildOverview(context, site.url, pages, network, { inspected });
     await db.from('page_checks').delete().eq('site_id', site.id);
     await removeFolder(db.storage.from('page-shots'), site.id);

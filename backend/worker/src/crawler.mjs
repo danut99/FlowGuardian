@@ -1,11 +1,15 @@
 // Basic scan (phase 1): crawl same-host pages and report HTTP errors, slowness, JS errors, broken links/images.
+import os from 'node:os';
 import { pageText, textFindings } from './text.mjs';
 
-const NAV_TIMEOUT = 20_000;
+const NAV_TIMEOUT = 30_000;
+// Heavy pages may never fire "load" quickly; past this they count as slow, not broken
+const LOAD_WAIT = 20_000;
 const MAX_PAGES = 20;
 const MAX_LINK_CHECKS = 60;
 const MAX_ERRORS_PER_PAGE = 5;
-const PAGE_CONCURRENCY = 4;
+// Small servers (1-2 CPUs) time out when too many pages render at once
+const PAGE_CONCURRENCY = os.cpus().length >= 4 ? 4 : 2;
 const LINK_CONCURRENCY = 10;
 const CRAWL_BUDGET_MS = 90_000;
 
@@ -47,7 +51,10 @@ async function checkPage(context, url, host) {
 
   const started = Date.now();
   try {
-    const res = await page.goto(url, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+    const go = () => page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+    // One retry: a single slow response shouldn't mark the page as down
+    const res = await go().catch((e) => (/timeout/i.test(e.message) ? go() : Promise.reject(e)));
+    await page.waitForLoadState('load', { timeout: LOAD_WAIT }).catch(() => {});
     const load_ms = Date.now() - started;
     const http_status = res?.status() ?? null;
     const isHtml = (res?.headers()['content-type'] ?? '').includes('text/html');
