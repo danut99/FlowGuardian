@@ -46,19 +46,19 @@ const SERVICES = [
   ['Meta Pixel', 'Marketing', /connect\.facebook\.net|facebook\.com\/tr/],
   ['Google Ads', 'Marketing', /googleadservices\.com|doubleclick\.net/],
   ['TikTok Pixel', 'Marketing', /analytics\.tiktok\.com/],
-  ['Stripe', 'Plăți', /stripe\.com/],
-  ['PayPal', 'Plăți', /paypal\.com|paypalobjects\.com/],
-  ['Netopia', 'Plăți', /netopia/],
-  ['Paddle', 'Plăți', /paddle\.com/],
-  ['Lemon Squeezy', 'Plăți', /lemonsqueezy\.com/],
+  ['Stripe', 'Payments', /stripe\.com/],
+  ['PayPal', 'Payments', /paypal\.com|paypalobjects\.com/],
+  ['Netopia', 'Payments', /netopia/],
+  ['Paddle', 'Payments', /paddle\.com/],
+  ['Lemon Squeezy', 'Payments', /lemonsqueezy\.com/],
   ['Intercom', 'Chat', /intercom\.io|intercomcdn\.com/],
   ['Tawk.to', 'Chat', /tawk\.to/],
   ['Crisp', 'Chat', /crisp\.chat/],
   ['reCAPTCHA', 'Anti-spam', /\/recaptcha\//],
-  ['Cookiebot / OneTrust', 'Consimțământ cookie', /cookiebot|onetrust|cookielaw/],
-  ['Google Fonts', 'Fonturi', /fonts\.(googleapis|gstatic)\.com/],
+  ['Cookiebot / OneTrust', 'Cookie consent', /cookiebot|onetrust|cookielaw/],
+  ['Google Fonts', 'Fonts', /fonts\.(googleapis|gstatic)\.com/],
   ['YouTube', 'Media', /youtube\.com|ytimg\.com/],
-  ['jsDelivr / cdnjs / unpkg', 'CDN public', /jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com/],
+  ['jsDelivr / cdnjs / unpkg', 'Public CDN', /jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com/],
 ];
 
 export function certDaysLeft(host) {
@@ -155,7 +155,7 @@ export async function inspectPage(context, url) {
     // One retry: a single slow response (cold cache, busy CI runner) shouldn't sink the whole scan
     const res = await go().catch(go).catch((e) => {
       const code = e.message.match(/net::(ERR_[A-Z_]+)/)?.[1];
-      throw new Error(code ? `Site-ul nu răspunde (${code}).` : 'Site-ul nu a răspuns în 30 de secunde (am încercat de două ori).');
+      throw new Error(code ? `The site is not responding (${code}).` : 'The site did not respond within 30 seconds (tried twice).');
     });
     // Trackers/long-polling can delay the load event forever; the page is usable without it
     const load_ms = await page.waitForLoadState('load', { timeout: 20_000 }).then(() => Date.now() - started, () => null);
@@ -247,25 +247,25 @@ function networkChecks(network) {
   const out = [];
   if (s4g) {
     out.push(
-      check('network', 'net_fcp', 'Primul conținut pe 4G slab', slow(s4g.fcp_ms, 3000, 6000),
-        s4g.fcp_ms == null ? 'Nimic vizibil în 45 s' : `Vizitatorul vede ceva după ${sec(s4g.fcp_ms)}`),
-      check('network', 'net_lcp', 'Conținutul principal pe 4G slab', slow(s4g.lcp_ms, 4000, 10_000),
-        s4g.lcp_ms == null ? 'Nu apare în 45 s' : `Apare după ${sec(s4g.lcp_ms)} (bun: sub 4 s)`),
+      check('network', 'net_fcp', 'First content on slow 4G', slow(s4g.fcp_ms, 3000, 6000),
+        s4g.fcp_ms == null ? 'Nothing visible within 45 s' : `Visitors see something after ${sec(s4g.fcp_ms)}`),
+      check('network', 'net_lcp', 'Main content on slow 4G', slow(s4g.lcp_ms, 4000, 10_000),
+        s4g.lcp_ms == null ? 'Does not appear within 45 s' : `Appears after ${sec(s4g.lcp_ms)} (good: under 4 s)`),
     );
   }
   if (g3) {
-    out.push(check('network', 'net_3g', 'Utilizabil pe 3G', slow(g3.lcp_ms, 8000, 20_000),
-      g3.lcp_ms == null ? 'Conținutul principal nu apare în 45 s' : `Conținutul principal apare după ${sec(g3.lcp_ms)}`));
+    out.push(check('network', 'net_3g', 'Usable on 3G', slow(g3.lcp_ms, 8000, 20_000),
+      g3.lcp_ms == null ? 'Main content does not appear within 45 s' : `Main content appears after ${sec(g3.lcp_ms)}`));
   }
-  if (!out.length) out.push(check('network', 'net_lcp', 'Conținutul principal pe 4G slab', 'unknown', 'Nu am putut simula conexiunea'));
+  if (!out.length) out.push(check('network', 'net_lcp', 'Main content on slow 4G', 'unknown', 'Could not simulate the connection'));
   return out;
 }
 
 function formKind(f) {
-  if (f.password) return 'Autentificare';
-  if (f.search) return 'Căutare';
+  if (f.password) return 'Login';
+  if (f.search) return 'Search';
   if (f.email && f.fields <= 2) return 'Newsletter';
-  return f.fields >= 3 ? 'Contact / comandă' : 'Altul';
+  return f.fields >= 3 ? 'Contact / order' : 'Other';
 }
 
 function buildArchitecture(home, cookies, pages, siteHost) {
@@ -361,9 +361,9 @@ export async function buildOverview(context, siteUrl, pages, network = [], { ins
     });
   }
 
-  const type = platforms.some((p) => SHOP_PLATFORMS.has(p)) || SHOP_SIGNALS.test(home.html) ? 'Magazin online'
-    : SERVICE_SIGNALS.test(home.html) ? 'Servicii / abonamente online'
-      : BLOG_SIGNALS.test(home.html) ? 'Blog / publicație' : 'Site de prezentare';
+  const type = platforms.some((p) => SHOP_PLATFORMS.has(p)) || SHOP_SIGNALS.test(home.html) ? 'Online store'
+    : SERVICE_SIGNALS.test(home.html) ? 'Online services / subscriptions'
+      : BLOG_SIGNALS.test(home.html) ? 'Blog / publication' : 'Business website';
 
   const first = pages[0] ?? {};
   const errorPages = pages.filter((p) => p.error || (p.http_status ?? 0) >= 400);
@@ -402,20 +402,20 @@ export async function buildOverview(context, siteUrl, pages, network = [], { ins
   const titles = new Map();
   for (const p of htmlPages) if (p.meta.title) titles.set(p.meta.title, (titles.get(p.meta.title) ?? 0) + 1);
   const pageMeta = [
-    [htmlPages.filter((p) => !p.meta.title).length, 'fără titlu'],
-    [htmlPages.filter((p) => !p.meta.description).length, 'fără descriere'],
-    [[...titles.values()].filter((n) => n > 1).reduce((s, n) => s + n, 0), 'cu titlu duplicat'],
-  ].filter(([n]) => n).map(([n, what]) => `${n} pagini ${what}`);
+    [htmlPages.filter((p) => !p.meta.title).length, 'without a title'],
+    [htmlPages.filter((p) => !p.meta.description).length, 'without a description'],
+    [[...titles.values()].filter((n) => n > 1).reduce((s, n) => s + n, 0), 'with a duplicate title'],
+  ].filter(([n]) => n).map(([n, what]) => `${n} ${n === 1 ? 'page' : 'pages'} ${what}`);
   const metaPages = htmlPages.map((p) => ({
     url: p.url,
     note: [
-      !p.meta.title && 'fără titlu',
-      !p.meta.description && 'fără descriere',
-      p.meta.title && titles.get(p.meta.title) > 1 && 'titlu duplicat',
+      !p.meta.title && 'no title',
+      !p.meta.description && 'no description',
+      p.meta.title && titles.get(p.meta.title) > 1 && 'duplicate title',
     ].filter(Boolean).join(', '),
   })).filter((p) => p.note);
   const altPages = htmlPages.filter((p) => p.meta.imgs_no_alt)
-    .map((p) => ({ url: p.url, note: `${p.meta.imgs_no_alt} ${p.meta.imgs_no_alt === 1 ? 'imagine' : 'imagini'} fără alt` }));
+    .map((p) => ({ url: p.url, note: `${p.meta.imgs_no_alt} ${p.meta.imgs_no_alt === 1 ? 'image' : 'images'} without alt` }));
   const imgs = htmlPages.reduce((s, p) => s + p.meta.imgs, 0);
   const noAlt = htmlPages.reduce((s, p) => s + p.meta.imgs_no_alt, 0);
   const noindex = meta.noindex || /noindex/i.test(h['x-robots-tag'] ?? '');
@@ -424,106 +424,106 @@ export async function buildOverview(context, siteUrl, pages, network = [], { ins
   const looseCookies = architecture.cookies.filter((c) => c.first_party && !c.secure);
 
   const checks = [
-    check('availability', 'home', 'Pagina răspunde',
+    check('availability', 'home', 'Page responds',
       first.http_status && first.http_status < 400 ? null : 'high',
       first.error ?? `HTTP ${first.http_status ?? '—'}`),
-    withPages(check('availability', 'pages', 'Paginile din site funcționează',
+    withPages(check('availability', 'pages', 'Site pages work',
       errorPages.length ? 'medium' : null,
-      errorPages.length ? `${errorPages.length} din ${pages.length} pagini au erori` : `${pages.length} pagini verificate`),
-      errorPages.map((p) => ({ url: p.url, note: p.error ? 'nu se încarcă' : `HTTP ${p.http_status}` }))),
-    check('availability', 'https', 'Conexiune securizată (HTTPS)',
-      https ? null : 'high', https ? 'Site-ul folosește HTTPS' : 'Site-ul nu folosește HTTPS'),
-    check('availability', 'cert', 'Certificat SSL valabil',
+      errorPages.length ? `${errorPages.length} of ${pages.length} pages have errors` : `${pages.length} ${pages.length === 1 ? 'page' : 'pages'} checked`),
+      errorPages.map((p) => ({ url: p.url, note: p.error ? 'does not load' : `HTTP ${p.http_status}` }))),
+    check('availability', 'https', 'Secure connection (HTTPS)',
+      https ? null : 'high', https ? 'The site uses HTTPS' : 'The site does not use HTTPS'),
+    check('availability', 'cert', 'Valid SSL certificate',
       days == null ? 'unknown' : days < 0 ? 'high' : days < 14 ? 'low' : null,
-      days == null ? 'Nu am putut citi certificatul' : days < 0 ? 'Certificatul a expirat' : `Expiră în ${days} zile`),
-    check('availability', 'redirect', 'HTTP redirecționează spre HTTPS',
+      days == null ? 'Could not read the certificate' : days < 0 ? 'The certificate has expired' : `Expires in ${days} ${days === 1 ? 'day' : 'days'}`),
+    check('availability', 'redirect', 'HTTP redirects to HTTPS',
       redirects == null ? 'unknown' : redirects ? null : 'low',
-      redirects == null ? 'Nu am putut verifica varianta http://' : redirects ? 'OK' : 'Varianta http:// nu trimite spre https://'),
+      redirects == null ? 'Could not check the http:// version' : redirects ? 'OK' : 'The http:// version does not redirect to https://'),
 
-    check('performance', 'load', 'Încărcare completă',
-      grade(load, 2500, 5000), load == null ? 'Nemăsurat' : `${sec(load)} până la încărcare completă`),
-    check('performance', 'ttfb', 'Răspunsul serverului (TTFB)',
-      grade(perf.ttfb, 800, 1800), perf.ttfb == null ? 'Nemăsurat' : `${Math.round(perf.ttfb)} ms până la primul byte`),
-    check('performance', 'lcp', 'Conținutul principal apare (LCP)',
-      grade(perf.lcp, 2500, 4000), perf.lcp == null ? 'Nemăsurat' : `${sec(perf.lcp)} (bun: sub 2,5 s)`),
-    check('performance', 'cls', 'Stabilitate vizuală (CLS)',
-      grade(perf.cls, 0.1, 0.25), perf.cls == null ? 'Nemăsurat' : `${perf.cls.toFixed(2)} (bun: sub 0,1)`),
-    check('performance', 'weight', 'Dimensiunea paginii',
-      grade(perf.bytes, 2_000_000, 5_000_000), `${(perf.bytes / 1_000_000).toFixed(1)} MB · ${perf.requests} cereri`),
-    withPages(check('performance', 'slow', 'Pagini lente (peste 5 s)',
-      slowPages.length ? 'low' : null, slowPages.length ? `${slowPages.length} pagini lente` : 'Nicio pagină lentă'),
+    check('performance', 'load', 'Full page load',
+      grade(load, 2500, 5000), load == null ? 'Not measured' : `${sec(load)} until fully loaded`),
+    check('performance', 'ttfb', 'Server response time (TTFB)',
+      grade(perf.ttfb, 800, 1800), perf.ttfb == null ? 'Not measured' : `${Math.round(perf.ttfb)} ms to first byte`),
+    check('performance', 'lcp', 'Main content appears (LCP)',
+      grade(perf.lcp, 2500, 4000), perf.lcp == null ? 'Not measured' : `${sec(perf.lcp)} (good: under 2.5 s)`),
+    check('performance', 'cls', 'Visual stability (CLS)',
+      grade(perf.cls, 0.1, 0.25), perf.cls == null ? 'Not measured' : `${perf.cls.toFixed(2)} (good: under 0.1)`),
+    check('performance', 'weight', 'Page size',
+      grade(perf.bytes, 2_000_000, 5_000_000), `${(perf.bytes / 1_000_000).toFixed(1)} MB · ${perf.requests} requests`),
+    withPages(check('performance', 'slow', 'Slow pages (over 5 s)',
+      slowPages.length ? 'low' : null, slowPages.length ? `${slowPages.length} slow ${slowPages.length === 1 ? 'page' : 'pages'}` : 'No slow pages'),
       slowPages.map((p) => ({ url: p.url, note: sec(p.load_ms) }))),
 
-    check('content', 'links', 'Link-uri funcționale',
-      brokenLinks.length ? 'medium' : null, brokenLinks.length ? `${brokenLinks.length} link-uri stricate` : 'Niciun link stricat'),
-    check('content', 'images', 'Imagini care se încarcă',
-      brokenImages.length ? 'low' : null, brokenImages.length ? `${brokenImages.length} imagini lipsă` : 'Toate imaginile se încarcă'),
-    check('content', 'js', 'Fără erori JavaScript',
-      jsErrors.length ? 'low' : null, jsErrors.length ? `${jsErrors.length} erori distincte în consolă` : 'Consola e curată'),
+    check('content', 'links', 'Working links',
+      brokenLinks.length ? 'medium' : null, brokenLinks.length ? `${brokenLinks.length} broken ${brokenLinks.length === 1 ? 'link' : 'links'}` : 'No broken links'),
+    check('content', 'images', 'Images load',
+      brokenImages.length ? 'low' : null, brokenImages.length ? `${brokenImages.length} missing ${brokenImages.length === 1 ? 'image' : 'images'}` : 'All images load'),
+    check('content', 'js', 'No JavaScript errors',
+      jsErrors.length ? 'low' : null, jsErrors.length ? `${jsErrors.length} distinct ${jsErrors.length === 1 ? 'error' : 'errors'} in the console` : 'The console is clean'),
     ...textChecks(check, withPages, pages),
 
-    check('seo', 'index', 'Pagina poate apărea în Google',
-      noindex ? 'high' : null, noindex ? 'Pagina principală are noindex' : 'Indexarea e permisă'),
+    check('seo', 'index', 'Page can appear in Google',
+      noindex ? 'high' : null, noindex ? 'The home page has noindex' : 'Indexing is allowed'),
     check('seo', 'robots', 'robots.txt',
       robots.blocksAll ? 'high' : robots.found ? null : 'low',
-      robots.blocksAll ? 'Blochează toate motoarele de căutare (Disallow: /)' : robots.found ? 'OK' : 'Lipsește robots.txt'),
-    check('seo', 'sitemap', 'Sitemap XML',
-      robots.sitemap ? null : 'low', robots.sitemap ?? 'Nu am găsit sitemap.xml'),
-    check('seo', 'title', 'Titlu de pagină',
+      robots.blocksAll ? 'Blocks all search engines (Disallow: /)' : robots.found ? 'OK' : 'robots.txt is missing'),
+    check('seo', 'sitemap', 'XML sitemap',
+      robots.sitemap ? null : 'low', robots.sitemap ?? 'No sitemap.xml found'),
+    check('seo', 'title', 'Page title',
       !titleLen ? 'medium' : titleLen < 10 || titleLen > 65 ? 'low' : null,
-      !titleLen ? 'Lipsește <title>' : titleLen > 65 ? `Prea lung (${titleLen} caractere, Google taie după ~60)` : titleLen < 10 ? 'Prea scurt' : meta.title),
-    check('seo', 'description', 'Descriere pentru Google',
-      meta.description ? null : 'low', meta.description ? 'Există meta description' : 'Lipsește meta description'),
-    withPages(check('seo', 'pages_meta', 'Titluri și descrieri pe toate paginile',
-      pageMeta.length ? 'low' : null, pageMeta.length ? pageMeta.join(', ') : `${htmlPages.length} pagini verificate`), metaPages),
-    check('seo', 'canonical', 'Adresă canonică',
-      meta.canonical ? null : 'low', meta.canonical ?? 'Lipsește <link rel="canonical">'),
-    check('seo', 'viewport', 'Adaptat pentru mobil',
-      meta.viewport ? null : 'medium', meta.viewport ? 'Are meta viewport' : 'Lipsește meta viewport'),
-    check('seo', 'h1', 'Titlu principal (H1)',
-      meta.h1 ? null : 'low', meta.h1 ? `${meta.h1} titluri H1` : 'Niciun H1 pe pagină'),
-    check('seo', 'lang', 'Limba paginii declarată',
-      meta.lang ? null : 'low', meta.lang || 'Lipsește atributul lang'),
-    withPages(check('seo', 'alt', 'Text alternativ la imagini',
-      noAlt ? 'low' : null, noAlt ? `${noAlt} din ${imgs} imagini fără alt` : `${imgs} imagini verificate`), altPages),
-    check('seo', 'og', 'Previzualizare la distribuire (Open Graph)',
-      meta.og ? null : 'low', meta.og ? 'Are og:title și og:image' : 'Lipsesc og:title / og:image'),
-    check('seo', 'jsonld', 'Date structurate (schema.org)',
-      meta.jsonld ? null : 'low', meta.jsonld ? `${meta.jsonld} blocuri JSON-LD${types.length ? `: ${types.slice(0, 8).join(', ')}` : ''}` : 'Nu există JSON-LD'),
-    check('seo', 'schema_core', 'Identitatea site-ului în schema.org (Organization, WebSite)',
+      !titleLen ? '<title> is missing' : titleLen > 65 ? `Too long (${titleLen} characters, Google cuts it after ~60)` : titleLen < 10 ? 'Too short' : meta.title),
+    check('seo', 'description', 'Description for Google',
+      meta.description ? null : 'low', meta.description ? 'Has a meta description' : 'Meta description is missing'),
+    withPages(check('seo', 'pages_meta', 'Titles and descriptions on all pages',
+      pageMeta.length ? 'low' : null, pageMeta.length ? pageMeta.join(', ') : `${htmlPages.length} ${htmlPages.length === 1 ? 'page' : 'pages'} checked`), metaPages),
+    check('seo', 'canonical', 'Canonical URL',
+      meta.canonical ? null : 'low', meta.canonical ?? '<link rel="canonical"> is missing'),
+    check('seo', 'viewport', 'Mobile-friendly',
+      meta.viewport ? null : 'medium', meta.viewport ? 'Has a meta viewport' : 'Meta viewport is missing'),
+    check('seo', 'h1', 'Main heading (H1)',
+      meta.h1 ? null : 'low', meta.h1 ? `${meta.h1} H1 ${meta.h1 === 1 ? 'heading' : 'headings'}` : 'No H1 on the page'),
+    check('seo', 'lang', 'Page language declared',
+      meta.lang ? null : 'low', meta.lang || 'The lang attribute is missing'),
+    withPages(check('seo', 'alt', 'Alt text on images',
+      noAlt ? 'low' : null, noAlt ? `${noAlt} of ${imgs} images without alt` : `${imgs} ${imgs === 1 ? 'image' : 'images'} checked`), altPages),
+    check('seo', 'og', 'Share preview (Open Graph)',
+      meta.og ? null : 'low', meta.og ? 'Has og:title and og:image' : 'og:title / og:image are missing'),
+    check('seo', 'jsonld', 'Structured data (schema.org)',
+      meta.jsonld ? null : 'low', meta.jsonld ? `${meta.jsonld} JSON-LD ${meta.jsonld === 1 ? 'block' : 'blocks'}${types.length ? `: ${types.slice(0, 8).join(', ')}` : ''}` : 'No JSON-LD'),
+    check('seo', 'schema_core', 'Site identity in schema.org (Organization, WebSite)',
       !missingCore.length ? null : missingCore.length === 2 ? 'low' : 'hardening',
-      !missingCore.length ? 'Are Organization și WebSite'
-        : `Lipsește ${missingCore.join(', ')}${types.length ? ` — pe pagina principală am găsit: ${types.slice(0, 6).join(', ')}` : ''}`),
-    check('seo', 'llms_txt', 'Ghid pentru asistenții AI (llms.txt)',
+      !missingCore.length ? 'Has Organization and WebSite'
+        : `Missing ${missingCore.join(', ')}${types.length ? ` — found on the home page: ${types.slice(0, 6).join(', ')}` : ''}`),
+    check('seo', 'llms_txt', 'Guide for AI assistants (llms.txt)',
       llms.llms ? null : 'hardening',
-      llms.llms ? (llms.full ? 'Are /llms.txt și /llms-full.txt' : 'Are /llms.txt (opțional lipsește /llms-full.txt)')
-        : llms.full ? 'Are doar /llms-full.txt — lipsește /llms.txt, fișierul principal' : 'Lipsesc /llms.txt și /llms-full.txt'),
+      llms.llms ? (llms.full ? 'Has /llms.txt and /llms-full.txt' : 'Has /llms.txt (optional /llms-full.txt is missing)')
+        : llms.full ? 'Only has /llms-full.txt — /llms.txt, the main file, is missing' : '/llms.txt and /llms-full.txt are missing'),
 
-    check('security', 'forms', 'Formulare trimise securizat',
+    check('security', 'forms', 'Forms submit securely',
       insecureForms.length ? 'medium' : null,
-      insecureForms.length ? `${insecureForms.length} formulare trimit date prin http://` : `${architecture.forms.length} formulare verificate`),
-    check('security', 'mixed', 'Fără conținut nesecurizat',
+      insecureForms.length ? `${insecureForms.length} ${insecureForms.length === 1 ? 'form sends' : 'forms send'} data over http://` : `${architecture.forms.length} ${architecture.forms.length === 1 ? 'form' : 'forms'} checked`),
+    check('security', 'mixed', 'No insecure content',
       https && home.insecure.length ? 'low' : null,
-      https && home.insecure.length ? `${home.insecure.length} resurse încărcate prin http://` : 'OK'),
-    check('security', 'hsts', 'HSTS (forțează HTTPS)',
-      h['strict-transport-security'] ? null : 'hardening', h['strict-transport-security'] ? 'Activ' : 'Recomandat: Strict-Transport-Security'),
-    check('security', 'nosniff', 'Protecție tip conținut',
+      https && home.insecure.length ? `${home.insecure.length} ${home.insecure.length === 1 ? 'resource' : 'resources'} loaded over http://` : 'OK'),
+    check('security', 'hsts', 'HSTS (forces HTTPS)',
+      h['strict-transport-security'] ? null : 'hardening', h['strict-transport-security'] ? 'Enabled' : 'Recommended: Strict-Transport-Security'),
+    check('security', 'nosniff', 'Content type protection',
       /nosniff/i.test(h['x-content-type-options'] ?? '') ? null : 'hardening',
-      /nosniff/i.test(h['x-content-type-options'] ?? '') ? 'Activ' : 'Recomandat: X-Content-Type-Options: nosniff'),
-    check('security', 'frame', 'Protecție clickjacking',
+      /nosniff/i.test(h['x-content-type-options'] ?? '') ? 'Enabled' : 'Recommended: X-Content-Type-Options: nosniff'),
+    check('security', 'frame', 'Clickjacking protection',
       h['x-frame-options'] || /frame-ancestors/i.test(csp) ? null : 'hardening',
-      h['x-frame-options'] || /frame-ancestors/i.test(csp) ? 'Activ' : 'Recomandat: X-Frame-Options sau CSP frame-ancestors'),
+      h['x-frame-options'] || /frame-ancestors/i.test(csp) ? 'Enabled' : 'Recommended: X-Frame-Options or CSP frame-ancestors'),
     check('security', 'csp', 'Content Security Policy',
-      csp ? null : 'hardening', csp ? 'Activ' : 'Recomandat: Content-Security-Policy'),
-    check('security', 'cookies', 'Cookie-uri marcate Secure',
+      csp ? null : 'hardening', csp ? 'Enabled' : 'Recommended: Content-Security-Policy'),
+    check('security', 'cookies', 'Cookies marked Secure',
       https && looseCookies.length ? 'hardening' : null,
-      https && looseCookies.length ? `${looseCookies.length} cookie-uri proprii fără Secure` : `${architecture.cookies.length} cookie-uri verificate`),
+      https && looseCookies.length ? `${looseCookies.length} first-party ${looseCookies.length === 1 ? 'cookie' : 'cookies'} without Secure` : `${architecture.cookies.length} ${architecture.cookies.length === 1 ? 'cookie' : 'cookies'} checked`),
     ...networkChecks(network),
     ...complianceChecks(check, {
       legal: meta.legal, requests: home.requests, cookies, services: architecture.services,
       forms: architecture.forms,
-      sales: type === 'Magazin online' ? 'goods'
-        : type === 'Servicii / abonamente online' || architecture.services.some((s) => s.category === 'Plăți') ? 'services' : null,
+      sales: type === 'Online store' ? 'goods'
+        : type === 'Online services / subscriptions' || architecture.services.some((s) => s.category === 'Payments') ? 'services' : null,
     }),
   ].filter((c) => !partial || !SITE_WIDE.has(c.id));
 

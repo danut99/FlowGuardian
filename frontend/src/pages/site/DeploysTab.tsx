@@ -21,13 +21,13 @@ const sec = (ms: number | null | undefined) => (ms == null ? '—' : `${(ms / 10
 const findingStatus = (f: Finding): CheckStatus => (f.improved ? 'pass' : f.severity === 'high' || f.severity === 'medium' ? 'fail' : 'warn')
 
 const METRICS: { label: string; get: (s: Snapshot) => number | null; fmt: (v: number) => string; lowerIsBetter: boolean }[] = [
-  { label: 'Conținut (LCP)', get: (s) => s.lcp, fmt: (v) => sec(v), lowerIsBetter: true },
+  { label: 'Content (LCP)', get: (s) => s.lcp, fmt: (v) => sec(v), lowerIsBetter: true },
   { label: 'Server (TTFB)', get: (s) => s.ttfb, fmt: (v) => `${Math.round(v)} ms`, lowerIsBetter: true },
-  { label: 'Încărcare', get: (s) => s.load_ms, fmt: (v) => sec(v), lowerIsBetter: true },
-  { label: 'Stabilitate (CLS)', get: (s) => s.cls, fmt: (v) => v.toFixed(2), lowerIsBetter: true },
-  { label: 'Dimensiune', get: (s) => s.bytes, fmt: (v) => `${(v / 1e6).toFixed(1)} MB`, lowerIsBetter: true },
-  { label: 'Cereri', get: (s) => s.requests, fmt: (v) => String(v), lowerIsBetter: true },
-  { label: 'Erori JavaScript', get: (s) => s.js_errors.length, fmt: (v) => String(v), lowerIsBetter: true },
+  { label: 'Load time', get: (s) => s.load_ms, fmt: (v) => sec(v), lowerIsBetter: true },
+  { label: 'Stability (CLS)', get: (s) => s.cls, fmt: (v) => v.toFixed(2), lowerIsBetter: true },
+  { label: 'Size', get: (s) => s.bytes, fmt: (v) => `${(v / 1e6).toFixed(1)} MB`, lowerIsBetter: true },
+  { label: 'Requests', get: (s) => s.requests, fmt: (v) => String(v), lowerIsBetter: true },
+  { label: 'JavaScript errors', get: (s) => s.js_errors.length, fmt: (v) => String(v), lowerIsBetter: true },
 ]
 
 export function DeploysTab({ siteId, runs }: { siteId: string; runs: Run[] }) {
@@ -54,22 +54,22 @@ export function DeploysTab({ siteId, runs }: { siteId: string; runs: Run[] }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
       <motion.div variants={fadeUp} className="card" style={{ marginBottom: '1.25rem' }}>
-        <h2 style={{ margin: 0 }}>Publicări detectate</h2>
+        <h2 style={{ margin: 0 }}>Detected deploys</h2>
         <p className="muted" style={{ margin: '0.3rem 0 0' }}>
-          Observăm singuri când apare o versiune nouă a site-ului (verificăm la ~15 minute). Atunci măsurăm din nou pagina principală,
-          o comparăm cu versiunea anterioară și rulăm toate testele.
+          We notice on our own when a new version of the site goes live (we check every ~15 minutes). Then we re-measure the home page,
+          compare it with the previous version and run all tests.
         </p>
         <p className="muted small" style={{ margin: '0.5rem 0 0' }}>
           {tracking?.deploy_tracking === 'unstable'
-            ? 'Site-ul schimbă adresele fișierelor la fiecare vizită, așa că nu putem detecta publicările sigur.'
+            ? 'The site changes its file addresses on every visit, so we can\'t reliably detect deploys.'
             : tracking?.deploy_checked_at
-              ? `Ultima verificare: ${new Date(tracking.deploy_checked_at).toLocaleString('ro-RO')}`
-              : 'Urmărirea pornește la următoarea rulare a worker-ului.'}
+              ? `Last check: ${new Date(tracking.deploy_checked_at).toLocaleString('en-GB')}`
+              : 'Tracking starts on the next worker run.'}
         </p>
       </motion.div>
 
       {deploys.length === 0 ? (
-        <p className="muted">Încă nu am detectat nicio publicare nouă. Când publici o versiune, apare aici cu tot ce s-a schimbat.</p>
+        <p className="muted">No new deploys detected yet. When you publish a new version, it shows up here with everything that changed.</p>
       ) : (
         <div className="list">
           {deploys.map((d, i) => <DeployCard key={d.id} deploy={d} runs={runs} defaultOpen={i === 0} />)}
@@ -96,12 +96,12 @@ function DeployCard({ deploy: d, runs, defaultOpen }: { deploy: Deploy; runs: Ru
       <button className="deploy-head" onClick={() => setOpen(!open)}>
         {d.status === 'pending' ? <span className="spinner" /> : <StatusIcon status={state} />}
         <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-          <div className="title">Versiune nouă · {new Date(d.detected_at).toLocaleString('ro-RO', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+          <div className="title">New version · {new Date(d.detected_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</div>
           <div className="muted small">
-            {d.status === 'pending' ? 'Măsurăm versiunea nouă…'
-              : d.status === 'error' ? `Nu am putut măsura: ${d.error}`
-              : problems.length ? `${problems.length} ${problems.length === 1 ? 'problemă nouă' : 'probleme noi'}` : 'Nicio regresie'}
-            {testRuns.length > 0 && ` · teste: ${testRuns.length - failed.length}/${testRuns.length} trec`}
+            {d.status === 'pending' ? 'Measuring the new version…'
+              : d.status === 'error' ? `Couldn't measure: ${d.error}`
+              : problems.length ? `${problems.length} ${problems.length === 1 ? 'new problem' : 'new problems'}` : 'No regressions'}
+            {testRuns.length > 0 && ` · tests: ${testRuns.length - failed.length}/${testRuns.length} passing`}
           </div>
         </div>
         <motion.span className="muted" animate={{ rotate: open ? 90 : 0 }}>›</motion.span>
@@ -124,7 +124,7 @@ function DeployCard({ deploy: d, runs, defaultOpen }: { deploy: Deploy; runs: Ru
 
               {d.before && d.after && (
                 <table className="table">
-                  <thead><tr><th>Pagina principală</th><th>Înainte</th><th>După</th></tr></thead>
+                  <thead><tr><th>Home page</th><th>Before</th><th>After</th></tr></thead>
                   <tbody>
                     {METRICS.map((m) => {
                       const b = m.get(d.before!)
@@ -144,7 +144,7 @@ function DeployCard({ deploy: d, runs, defaultOpen }: { deploy: Deploy; runs: Ru
 
               {testRuns.length > 0 && (
                 <div>
-                  <div className="label" style={{ marginBottom: '0.4rem' }}>Teste rulate după publicare</div>
+                  <div className="label" style={{ marginBottom: '0.4rem' }}>Tests run after the deploy</div>
                   {testRuns.map((r) => (
                     <div key={r.id} className={`check ${r.status === 'passed' ? 'pass' : 'fail'}`}>
                       <StatusIcon status={r.status === 'passed' ? 'pass' : 'fail'} />
@@ -159,11 +159,11 @@ function DeployCard({ deploy: d, runs, defaultOpen }: { deploy: Deploy; runs: Ru
 
               {(d.changes.added?.length || d.changes.removed?.length || d.changes.generator) && (
                 <details>
-                  <summary className="muted small">Fișiere schimbate ({(d.changes.added?.length ?? 0) + (d.changes.removed?.length ?? 0)})</summary>
+                  <summary className="muted small">Changed files ({(d.changes.added?.length ?? 0) + (d.changes.removed?.length ?? 0)})</summary>
                   <div className="issue-list">
-                    {d.changes.generator && <div className="issue"><span>Platformă</span><span className="mono small">{d.changes.generator.before ?? '—'} → {d.changes.generator.after ?? '—'}</span></div>}
-                    {d.changes.added?.map((a) => <div key={`+${a}`} className="issue"><span className="mono truncate" title={a}>{a}</span><span className="small" style={{ color: 'var(--ok)' }}>nou</span></div>)}
-                    {d.changes.removed?.map((a) => <div key={`-${a}`} className="issue"><span className="mono truncate" title={a}>{a}</span><span className="muted small">scos</span></div>)}
+                    {d.changes.generator && <div className="issue"><span>Platform</span><span className="mono small">{d.changes.generator.before ?? '—'} → {d.changes.generator.after ?? '—'}</span></div>}
+                    {d.changes.added?.map((a) => <div key={`+${a}`} className="issue"><span className="mono truncate" title={a}>{a}</span><span className="small" style={{ color: 'var(--ok)' }}>new</span></div>)}
+                    {d.changes.removed?.map((a) => <div key={`-${a}`} className="issue"><span className="mono truncate" title={a}>{a}</span><span className="muted small">removed</span></div>)}
                   </div>
                 </details>
               )}

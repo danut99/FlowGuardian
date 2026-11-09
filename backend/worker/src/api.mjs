@@ -29,7 +29,7 @@ function privateIp(ip) {
 async function assertPublic(url) {
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const ips = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true })).map((a) => a.address);
-  if (!ips.length || ips.some(privateIp)) throw new Error('Adresa duce către o rețea privată și nu poate fi verificată.');
+  if (!ips.length || ips.some(privateIp)) throw new Error('The address points to a private network and cannot be checked.');
 }
 
 async function readBody(res) {
@@ -62,11 +62,11 @@ export function getPath(obj, path) {
 
 const parse = (v) => { try { return JSON.parse(v); } catch { return v; } };
 const same = (a, b) => (typeof a === 'object' || typeof b === 'object' ? JSON.stringify(a) === JSON.stringify(b) : String(a) === String(b));
-const show = (v) => (v === undefined ? 'lipsește' : typeof v === 'string' ? v.slice(0, 120) : JSON.stringify(v)?.slice(0, 120));
+const show = (v) => (v === undefined ? 'missing' : typeof v === 'string' ? v.slice(0, 120) : JSON.stringify(v)?.slice(0, 120));
 
 export function evalRule(rule, json, text) {
   if (rule.op === 'text_contains') return { ok: text.includes(rule.value ?? ''), actual: null };
-  if (json === undefined) return { ok: false, actual: 'răspunsul nu e JSON' };
+  if (json === undefined) return { ok: false, actual: 'the response is not JSON' };
   const actual = getPath(json, rule.path ?? '');
   const expected = parse(rule.value ?? '');
   const num = (v) => (typeof v === 'number' ? v : Number(v));
@@ -109,27 +109,27 @@ export async function checkApi(monitor) {
     text = monitor.method === 'HEAD' ? '' : await readBody(res);
   } catch (e) {
     const code = e?.cause?.code ?? e?.code;
-    const msg = e?.name === 'TimeoutError' ? `Nu a răspuns în ${TIMEOUT_MS / 1000} s.`
-      : code === 'ENOTFOUND' ? 'Domeniul nu există sau nu are DNS (ENOTFOUND).'
-      : code ? `Nu am putut conecta (${code}).` : e?.message ?? String(e);
+    const msg = e?.name === 'TimeoutError' ? `No response within ${TIMEOUT_MS / 1000} s.`
+      : code === 'ENOTFOUND' ? 'The domain does not exist or has no DNS (ENOTFOUND).'
+      : code ? `Could not connect (${code}).` : e?.message ?? String(e);
     return { status: 'error', http_status: null, duration_ms: Date.now() - started, error: msg, failures: [], response_sample: null };
   }
   const duration = Date.now() - started;
 
   const failures = [];
   if (res.status !== monitor.expected_status) {
-    failures.push({ kind: 'status', message: `Status HTTP ${res.status} (așteptat ${monitor.expected_status})` });
+    failures.push({ kind: 'status', message: `HTTP status ${res.status} (expected ${monitor.expected_status})` });
   }
   if (duration > monitor.max_ms) {
-    failures.push({ kind: 'speed', message: `Răspuns în ${duration} ms (limita ${monitor.max_ms} ms)` });
+    failures.push({ kind: 'speed', message: `Responded in ${duration} ms (limit ${monitor.max_ms} ms)` });
   }
   let json;
   try { json = text ? JSON.parse(text) : undefined; } catch { json = undefined; }
   for (const rule of monitor.rules ?? []) {
     const r = evalRule(rule, json, text);
     if (!r.ok) {
-      const what = rule.op === 'text_contains' ? `răspunsul nu conține „${rule.value}”` : `${rule.path} ${rule.op} ${rule.value ?? ''}`.trim();
-      failures.push({ kind: 'rule', rule, message: `Regula „${what}” nu e respectată${r.actual != null ? ` (valoare: ${r.actual})` : ''}` });
+      const what = rule.op === 'text_contains' ? `response contains “${rule.value}”` : `${rule.path} ${rule.op} ${rule.value ?? ''}`.trim();
+      failures.push({ kind: 'rule', rule, message: `Rule “${what}” is not met${r.actual != null ? ` (value: ${r.actual})` : ''}` });
     }
   }
 

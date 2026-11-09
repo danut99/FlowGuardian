@@ -31,10 +31,10 @@ export function PagesPanel({ site, pages, onDeep }: { site: Site; pages: PageChe
     <div className="card">
       <div className="row">
         <div>
-          <h3 style={{ margin: 0 }}>Pagini analizate</h3>
-          <p className="muted small" style={{ margin: '0.2rem 0 0' }}>Viteză, SEO și erori pe fiecare pagină. Click pe o pagină pentru detalii.</p>
+          <h3 style={{ margin: 0 }}>Analyzed pages</h3>
+          <p className="muted small" style={{ margin: '0.2rem 0 0' }}>Speed, SEO and errors on every page. Click a page for details.</p>
         </div>
-        <span className="muted small nowrap">{running ? <><span className="spinner" /> {done}/{pages.length}</> : `${pages.length} pagini`}</span>
+        <span className="muted small nowrap">{running ? <><span className="spinner" /> {done}/{pages.length}</> : `${pages.length} pages`}</span>
       </div>
       {running && (
         <div className="progress"><motion.div animate={{ width: `${(done / Math.max(1, pages.length)) * 100}%` }} transition={{ duration: 0.4 }} /></div>
@@ -60,8 +60,8 @@ function PageRow({ page: p, open, onToggle, onDeep }: { page: PageCheck; open: b
         <span className="page-path truncate" title={p.url}>{pathOf(p.url)}</span>
         <span className="page-meta muted small">
           {p.status === 'done' && p.metrics && <>LCP {sec(p.metrics.lcp)} · </>}
-          {p.status === 'done' ? (problems.length ? `${problems.length} probleme${fails ? ` (${fails} grave)` : ''}` : 'totul OK')
-            : p.status === 'error' ? 'nu am putut analiza' : 'se analizează…'}
+          {p.status === 'done' ? (problems.length ? `${problems.length} ${problems.length === 1 ? 'problem' : 'problems'}${fails ? ` (${fails} serious)` : ''}` : 'all OK')
+            : p.status === 'error' ? 'couldn\'t analyze' : 'analyzing…'}
         </span>
         <motion.span className="muted" animate={{ rotate: open ? 90 : 0 }}>›</motion.span>
       </button>
@@ -90,11 +90,11 @@ function PageDetail({ page: p, onDeep }: { page: PageCheck; onDeep: () => void }
 
       {m && (
         <div className="metric-grid">
-          <Metric label="Încărcare" value={sec(m.load_ms)} />
+          <Metric label="Load time" value={sec(m.load_ms)} />
           <Metric label="Server (TTFB)" value={m.ttfb == null ? '—' : `${Math.round(m.ttfb)} ms`} />
-          <Metric label="Conținut (LCP)" value={sec(m.lcp)} />
-          <Metric label="Stabilitate (CLS)" value={m.cls == null ? '—' : m.cls.toFixed(2)} />
-          <Metric label="Dimensiune" value={`${(m.bytes / 1e6).toFixed(1)} MB`} sub={`${m.requests} cereri`} />
+          <Metric label="Content (LCP)" value={sec(m.lcp)} />
+          <Metric label="Stability (CLS)" value={m.cls == null ? '—' : m.cls.toFixed(2)} />
+          <Metric label="Size" value={`${(m.bytes / 1e6).toFixed(1)} MB`} sub={`${m.requests} requests`} />
         </div>
       )}
 
@@ -103,7 +103,7 @@ function PageDetail({ page: p, onDeep }: { page: PageCheck; onDeep: () => void }
           {problems.map((c) => <MiniCheck key={c.id} c={c} />)}
           {passed.length > 0 && (
             <button className="fold" onClick={() => setShowOk(!showOk)}>
-              {showOk ? 'Ascunde' : `${passed.length} verificări în regulă`}
+              {showOk ? 'Hide' : `${passed.length} ${passed.length === 1 ? 'check' : 'checks'} OK`}
             </button>
           )}
           {showOk && passed.map((c) => <MiniCheck key={c.id} c={c} />)}
@@ -113,14 +113,14 @@ function PageDetail({ page: p, onDeep }: { page: PageCheck; onDeep: () => void }
       <div className="deep">
         <div className="row">
           <div>
-            <div className="label">Analiză în detaliu</div>
-            <div className="muted small">Rețea slabă (4G/3G), aspect pe telefon, preloader și scroll lateral, capturi de ecran.</div>
+            <div className="label">In-depth analysis</div>
+            <div className="muted small">Slow network (4G/3G), phone layout, preloader and sideways scroll, screenshots.</div>
           </div>
           <button className="btn sm" disabled={deepBusy} onClick={onDeep}>
-            {deepBusy ? <><span className="spinner" /> Analizăm…</> : p.deep_status === 'done' ? 'Analizează din nou' : 'Analizează în detaliu'}
+            {deepBusy ? <><span className="spinner" /> Analyzing…</> : p.deep_status === 'done' ? 'Re-scan' : 'Analyze in depth'}
           </button>
         </div>
-        {deepBusy && <p className="muted small">Durează în jur de un minut. Rezultatele apar aici automat.</p>}
+        {deepBusy && <p className="muted small">Takes about a minute. Results show up here automatically.</p>}
         {p.deep_status === 'error' && <p className="notice error">{p.deep_error}</p>}
         {p.deep_status === 'done' && p.deep && <DeepResult deep={p.deep} />}
       </div>
@@ -133,18 +133,18 @@ function DeepResult({ deep }: { deep: NonNullable<PageCheck['deep']> }) {
     <div style={{ display: 'grid', gap: '0.75rem', marginTop: '0.75rem' }}>
       <div className="metric-grid">
         {deep.network.filter((n) => !n.error).map((n) => (
-          <Metric key={n.id} label={n.label} value={n.lcp_ms == null ? 'nu apare în 45 s' : sec(n.lcp_ms)} sub="până apare conținutul" />
+          <Metric key={n.id} label={n.label} value={n.lcp_ms == null ? 'doesn\'t appear within 45 s' : sec(n.lcp_ms)} sub="until content appears" />
         ))}
       </div>
-      <Verdict label="Aspect pe telefon" v={deep.mobile} />
-      <Verdict label="Încărcare (preloader, scroll lateral)" v={deep.load} />
+      <Verdict label="Phone layout" v={deep.mobile} />
+      <Verdict label="Loading (preloader, sideways scroll)" v={deep.load} />
       <div className="shots">
-        <Shot path={deep.shots.mobile_issue} caption="Problema pe telefon" />
-        <Shot path={deep.shots.load_issue} caption="Problema la încărcare" />
+        <Shot path={deep.shots.mobile_issue} caption="Problem on phone" />
+        <Shot path={deep.shots.load_issue} caption="Problem while loading" />
         <Shot path={deep.shots.desktop} caption="Desktop" />
-        <Shot path={deep.shots.mobile} caption="Telefon" />
+        <Shot path={deep.shots.mobile} caption="Phone" />
       </div>
-      <span className="muted small">Analizat {new Date(deep.analyzed_at).toLocaleString('ro-RO')}</span>
+      <span className="muted small">Analyzed {new Date(deep.analyzed_at).toLocaleString('en-GB')}</span>
     </div>
   )
 }
@@ -156,7 +156,7 @@ function Verdict({ label, v }: { label: string; v: DeepVerdict }) {
       <StatusIcon status={status} />
       <div style={{ minWidth: 0 }}>
         <div className="label">{label}</div>
-        <div className="detail">{v.ok === true ? 'În regulă' : v.message}</div>
+        <div className="detail">{v.ok === true ? 'All good' : v.message}</div>
       </div>
     </div>
   )

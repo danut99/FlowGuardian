@@ -4,22 +4,22 @@ import { fadeUp, stagger } from '../components/motion'
 const CONTENT = {
   api: {
     title: 'API Guardian',
-    tagline: 'Monitorizează API-urile: disponibilitate, viteză și răspunsuri corecte.',
+    tagline: 'Monitor your APIs: availability, speed and correct responses.',
     features: [
-      ['Disponibilitate', 'Verificăm periodic fiecare endpoint și te anunțăm când nu răspunde.'],
-      ['Viteză', 'Alertă când timpul de răspuns depășește pragul tău (ex. 2 secunde).'],
-      ['Status HTTP', 'Detectăm erorile 4xx/5xx și schimbările neașteptate.'],
-      ['Reguli pe JSON', 'Ex. products.length > 0 — un 200 cu listă goală e tot o problemă.'],
+      ['Availability', 'We check every endpoint regularly and let you know when it stops responding.'],
+      ['Speed', 'Get an alert when response time goes over your limit (e.g. 2 seconds).'],
+      ['HTTP status', 'We detect 4xx/5xx errors and unexpected changes.'],
+      ['JSON rules', 'E.g. products.length > 0 — a 200 with an empty list is still a problem.'],
     ],
   },
   flowfix: {
     title: 'FlowFix',
-    tagline: 'Când apare o problemă, FlowFix acționează automat.',
+    tagline: 'When a problem appears, FlowFix takes action automatically.',
     features: [
-      ['Email', 'Notificare imediată pentru incidente critice, digest zilnic pentru mentenanță.'],
-      ['Tichete', 'Creează automat taskuri în instrumentul echipei tale.'],
-      ['Diagnostic', 'Selector schimbat sau bug real? Îți spunem diferența.'],
-      ['Acțiuni', 'Webhook-uri și alte automatizări declanșate de incidente.'],
+      ['Email', 'Instant alerts for critical incidents, a daily digest for maintenance.'],
+      ['Tickets', 'Automatically creates tasks in your team’s tool.'],
+      ['Diagnosis', 'Changed selector or real bug? We tell you the difference.'],
+      ['Actions', 'Webhooks and other automations triggered by incidents.'],
     ],
   },
 } as const
@@ -28,7 +28,7 @@ export function ComingSoon({ module }: { module: keyof typeof CONTENT }) {
   const c = CONTENT[module]
   return (
     <motion.div className="coming" variants={stagger} initial="hidden" animate="show">
-      <motion.span variants={fadeUp} className="chip accent">În curând</motion.span>
+      <motion.span variants={fadeUp} className="chip accent">Coming soon</motion.span>
       <motion.h1 variants={fadeUp} className="gradient-text" style={{ fontSize: '2.4rem', marginTop: '1rem' }}>{c.title}</motion.h1>
       <motion.p variants={fadeUp} className="muted" style={{ fontSize: '1.05rem' }}>{c.tagline}</motion.p>
       <motion.div className="feature-grid" variants={stagger}>

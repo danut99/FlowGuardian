@@ -76,17 +76,17 @@ export function SiteDetail() {
     else load()
   }
 
-  if (!site) return <p className="muted">{error ?? 'Se încarcă…'}</p>
+  if (!site) return <p className="muted">{error ?? 'Loading…'}</p>
 
   const scanning = site.scan_status === 'pending' || site.scan_status === 'scanning'
   const o = site.overview
   const proposedCount = tests.filter((t) => t.status === 'proposed').length
   const TABS: { id: Tab; label: string; count?: number }[] = [
-    { id: 'overview', label: 'Prezentare' },
-    { id: 'tests', label: 'Teste', count: tests.length - proposedCount || undefined },
-    { id: 'runs', label: 'Rulări', count: runs.length || undefined },
-    { id: 'deploys', label: 'Publicări' },
-    { id: 'history', label: 'Istoric' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'tests', label: 'Tests', count: tests.length - proposedCount || undefined },
+    { id: 'runs', label: 'Runs', count: runs.length || undefined },
+    { id: 'deploys', label: 'Deploys' },
+    { id: 'history', label: 'History' },
   ]
 
   return (
@@ -99,15 +99,15 @@ export function SiteDetail() {
           <div className="chips">
             {o?.type && <span className="chip accent">{o.type}</span>}
             {o?.platforms.map((p) => <span key={p} className="chip">{p}</span>)}
-            {o && !o.blocked && !scanning && <span className="chip">{o.pages_checked} pagini verificate</span>}
+            {o && !o.blocked && !scanning && <span className="chip">{o.pages_checked} {o.pages_checked === 1 ? 'page' : 'pages'} checked</span>}
             {site.scanned_at && !scanning && (
-              <span className="chip">analizat {new Date(site.scanned_at).toLocaleString('ro-RO', { dateStyle: 'short', timeStyle: 'short' })}</span>
+              <span className="chip">analyzed {new Date(site.scanned_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span>
             )}
           </div>
         </div>
         {!scanning && (
           <button className="btn ghost sm" onClick={() => act(() => supabase.rpc('request_scan', { sid: site.id }))}>
-            Analizează din nou
+            Analyze again
           </button>
         )}
         {o && !o.blocked && !scanning && <ScoreRing score={o.score} size={84} />}

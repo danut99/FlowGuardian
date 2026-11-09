@@ -134,7 +134,7 @@ async function pickNavigation(page, clickables, site, pageUrl, prefix) {
     if (c.css) locators.push({ type: 'css', value: c.css });
     tests.push({
       kind: 'click',
-      name: `Link-ul „${c.name}” duce la ${landed.pathname}`,
+      name: `The “${c.name}” link goes to ${landed.pathname}`,
       steps: [...prefix, { action: 'click', locators }, { action: 'expect_url', value: landed.pathname }],
     });
   }
@@ -178,7 +178,7 @@ async function pickForm(page, forms, prefix) {
   const isContact = priority(best.fields.map((f) => `${f.label} ${f.placeholder}`).join(' ')) === 2;
   return {
     kind: 'form',
-    name: `${isContact ? 'Formularul de contact' : 'Formularul'} se poate completa (${steps.length === 1 ? '1 câmp' : `${steps.length} câmpuri`}, fără trimitere)`,
+    name: `${isContact ? 'The contact form' : 'The form'} can be filled in (${steps.length === 1 ? '1 field' : `${steps.length} fields`}, not submitted)`,
     steps: [...prefix, ...steps],
   };
 }
@@ -186,8 +186,8 @@ async function pickForm(page, forms, prefix) {
 export async function load(page, url) {
   const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
   const status = res?.status() ?? 0;
-  if (status === 403 || status === 429) throw new Error(`Accesul a fost blocat (HTTP ${status}).`);
-  if (status >= 400) throw new Error(`Pagina a răspuns cu HTTP ${status}.`);
+  if (status === 403 || status === 429) throw new Error(`Access was blocked (HTTP ${status}).`);
+  if (status >= 400) throw new Error(`The page responded with HTTP ${status}.`);
   await page.waitForLoadState('load', { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(1500);
   return dismissConsent(page);
@@ -209,7 +209,7 @@ async function pickSearch(page, pageUrl, field, prefix) {
   const expect = param ? `${param[0]}=` : after.pathname;
   return {
     kind: 'search',
-    name: 'Căutarea funcționează (deschide rezultatele)',
+    name: 'Search works (opens results)',
     steps: [...prefix, { action: 'fill', locators, value: 'test' }, { action: 'press', locators: [locators[0]], value: 'Enter' }, { action: 'expect_url', value: expect }],
   };
 }
@@ -246,16 +246,16 @@ async function pickInteractions(page, clickables, site, pageUrl, prefix) {
     if (clicked && after.url !== before.url) {
       const u = new URL(after.url);
       if (u.host === site.host && !DYNAMIC_PATH.test(u.pathname)) {
-        tests.push({ kind: 'interaction', name: `Butonul „${c.name}” duce la ${u.pathname}`, steps: [...prefix, click, { action: 'expect_url', value: u.pathname }] });
+        tests.push({ kind: 'interaction', name: `The “${c.name}” button goes to ${u.pathname}`, steps: [...prefix, click, { action: 'expect_url', value: u.pathname }] });
       }
     } else if (clicked && target && !before.shown && after.shown) {
       tests.push({
-        kind: 'interaction', name: `Butonul „${c.name}” deschide ${c.popup === 'menu' || /men/i.test(c.name) ? 'meniul' : 'secțiunea'}`,
+        kind: 'interaction', name: `The “${c.name}” button opens ${c.popup === 'menu' || /men/i.test(c.name) ? 'the menu' : 'the section'}`,
         steps: [...prefix, click, { action: 'expect_visible', locators: [{ type: 'css', value: `#${c.controls}` }] }],
       });
     } else if (clicked && after.dialogs > before.dialogs) {
       tests.push({
-        kind: 'interaction', name: `Butonul „${c.name}” deschide o fereastră`,
+        kind: 'interaction', name: `The “${c.name}” button opens a dialog`,
         steps: [...prefix, click, { action: 'expect_visible', locators: [{ type: 'role', role: 'dialog' }] }],
       });
     }
@@ -276,18 +276,18 @@ async function pickContent(page, landmarks, pageLabel, prefix) {
     if (await toLocator(page, l).first().isVisible().catch(() => false)) steps.push({ action: 'expect_visible', locators: [l] });
   }
   if (steps.length < 2) return null;
-  return { kind: 'content', name: `Elementele principale apar pe ${pageLabel} (titlu, meniu, subsol)`, steps: [...prefix, ...steps] };
+  return { kind: 'content', name: `The main elements appear on ${pageLabel} (heading, menu, footer)`, steps: [...prefix, ...steps] };
 }
 
 // Propose tests for one page of the site. Order = most valuable first.
 export async function scanPage(page, siteUrl, pageUrl = siteUrl) {
   const site = new URL(siteUrl);
   const here = new URL(pageUrl);
-  if (here.host !== site.host) throw new Error('Pagina nu aparține site-ului.');
+  if (here.host !== site.host) throw new Error('The page does not belong to the site.');
   const consent = await load(page, here.href);
   const gotoStep = { action: 'goto', ...(here.href !== site.href ? { value: here.href } : {}) };
   const prefix = [gotoStep, ...(consent ? [consent] : [])];
-  const pageLabel = here.href === site.href || here.pathname === '/' ? 'pagina principală' : here.pathname;
+  const pageLabel = here.href === site.href || here.pathname === '/' ? 'the home page' : here.pathname;
 
   const { clickables, forms, search, landmarks } = await collect(page);
   const tests = [];

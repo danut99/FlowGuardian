@@ -3,7 +3,7 @@ const CAP_MS = 45_000;
 
 // Lighthouse-style mobile profiles; throughput in bytes/s
 export const PROFILES = [
-  { id: 'slow4g', label: '4G slab', latency: 150, down: 1.6e6 / 8, up: 750e3 / 8, cpu: 4 },
+  { id: 'slow4g', label: 'Slow 4G', latency: 150, down: 1.6e6 / 8, up: 750e3 / 8, cpu: 4 },
   { id: '3g', label: '3G', latency: 300, down: 750e3 / 8, up: 250e3 / 8, cpu: 4 },
 ];
 

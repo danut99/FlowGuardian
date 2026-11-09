@@ -24,7 +24,7 @@ const worstOf = (ns: SiteMapNode[]): CheckStatus => {
 const short = (s: string, max: number) => (s.length > max ? `${s.slice(0, Math.max(1, max - 1))}…` : s)
 const segments = (n: SiteMapNode) => new URL(n.url).pathname.split('/').filter(Boolean)
 const tooltip = (n: SiteMapNode) =>
-  `${n.url}\n${n.error ? 'eroare' : `HTTP ${n.status ?? '—'}`}${n.load_ms != null ? ` · ${(n.load_ms / 1000).toFixed(1)} s` : ''}`
+  `${n.url}\n${n.error ? 'error' : `HTTP ${n.status ?? '—'}`}${n.load_ms != null ? ` · ${(n.load_ms / 1000).toFixed(1)} s` : ''}`
 
 type Section = { key: string; label: string; index: SiteMapNode | null; pages: SiteMapNode[]; from: number }
 
@@ -49,7 +49,7 @@ function groupPages(nodes: SiteMapNode[]) {
   if (list.length > MAX_SECTIONS) {
     const extra = list.slice(MAX_SECTIONS - 1)
     list = [...list.slice(0, MAX_SECTIONS - 1), {
-      key: '*', label: `Altele (${extra.length})`, index: null, from: skip,
+      key: '*', label: `Other (${extra.length})`, index: null, from: skip,
       pages: extra.flatMap((g) => (g.index ? [g.index, ...g.pages] : g.pages)),
     }]
   }
@@ -113,8 +113,8 @@ export function SiteMap({ map }: { map: SiteMapData }) {
   return (
     <div className="card">
       <div className="row">
-        <h3 style={{ margin: 0 }}>Harta site-ului</h3>
-        <span className="muted small">{map.nodes.length} pagini · {map.edges.length} legături interne</span>
+        <h3 style={{ margin: 0 }}>Site map</h3>
+        <span className="muted small">{map.nodes.length} pages · {map.edges.length} internal links</span>
       </div>
       <div className="sitemap">
         <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', maxWidth: width, minWidth: Math.min(width, 640) }}>
@@ -156,21 +156,21 @@ export function SiteMap({ map }: { map: SiteMapData }) {
                 ))}
                 {more > 0 && (
                   <Node x={x + 24} y={pageTop + shown.length * (PAGE_H + PAGE_GAP)} w={W - 24} h={PAGE_H}
-                    label={`+${more} pagini`} status="muted" delay={0.75 + i * 0.06 + shown.length * 0.05} />
+                    label={`+${more} ${more === 1 ? 'page' : 'pages'}`} status="muted" delay={0.75 + i * 0.06 + shown.length * 0.05} />
                 )}
               </g>
             )
           })}
 
-          <Node x={rootX} y={rootY} w={rootW} h={H} label={`Acasă${prefix ? ` · ${prefix}` : ''}`}
+          <Node x={rootX} y={rootY} w={rootW} h={H} label={`Home${prefix ? ` · ${prefix}` : ''}`}
             status={health(root)} node={root} delay={0} strong />
         </svg>
       </div>
       <div className="chips">
         <span className="chip"><span className="dot pass" /> OK</span>
-        <span className="chip"><span className="dot warn" /> lentă (&gt; 5 s)</span>
-        <span className="chip"><span className="dot fail" /> eroare</span>
-        <span className="muted small" style={{ alignSelf: 'center' }}>Click pe o pagină ca s-o deschizi</span>
+        <span className="chip"><span className="dot warn" /> slow (&gt; 5 s)</span>
+        <span className="chip"><span className="dot fail" /> error</span>
+        <span className="muted small" style={{ alignSelf: 'center' }}>Click a page to open it</span>
       </div>
     </div>
   )
@@ -188,38 +188,38 @@ export function ArchitectureCard({ overview }: { overview: Overview }) {
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Arhitectură detectată</h3>
+      <h3 style={{ marginTop: 0 }}>Detected architecture</h3>
       <div className="arch">
-        <Block title="Tehnologie" items={tech.length ? [<div key="t" className="chips" style={{ marginTop: 0 }}>{tech.map((t) => <span key={t} className="chip">{t}</span>)}</div>] : []} />
-        <Block title="Servicii externe" items={[...byCategory].map(([cat, names]) => (
+        <Block title="Technology" items={tech.length ? [<div key="t" className="chips" style={{ marginTop: 0 }}>{tech.map((t) => <span key={t} className="chip">{t}</span>)}</div>] : []} />
+        <Block title="External services" items={[...byCategory].map(([cat, names]) => (
           <div key={cat} className="small"><span className="muted">{cat}:</span> {names.join(', ')}</div>
         ))} />
-        <Block title={`Formulare (${a.forms.length})`} items={a.forms.map((f) => (
+        <Block title={`Forms (${a.forms.length})`} items={a.forms.map((f) => (
           <div key={`${f.kind}${f.action}`} className="issue">
-            <span className="truncate">{f.kind} · {f.fields} câmpuri · {f.method.toUpperCase()}</span>
+            <span className="truncate">{f.kind} · {f.fields} fields · {f.method.toUpperCase()}</span>
             <span className="muted small nowrap">
-              {f.insecure ? <b style={{ color: 'var(--bad)' }}>http://</b> : `pe ${f.pages} ${f.pages === 1 ? 'pagină' : 'pagini'}`}
+              {f.insecure ? <b style={{ color: 'var(--bad)' }}>http://</b> : `on ${f.pages} ${f.pages === 1 ? 'page' : 'pages'}`}
             </span>
           </div>
         ))} />
-        <Block title={`Cookie-uri la prima vizită (${a.cookies.length})`} items={a.cookies.map((c) => (
+        <Block title={`Cookies on first visit (${a.cookies.length})`} items={a.cookies.map((c) => (
           <div key={`${c.domain}${c.name}`} className="issue">
             <span className="mono truncate" title={c.name}>{c.name}</span>
             <span className="muted small nowrap">
-              {c.first_party ? 'propriu' : c.domain}{c.secure ? ' · Secure' : ''}{c.http_only ? ' · HttpOnly' : ''}
+              {c.first_party ? 'first-party' : c.domain}{c.secure ? ' · Secure' : ''}{c.http_only ? ' · HttpOnly' : ''}
             </span>
           </div>
         ))} />
-        <Block title={`API-uri apelate (${a.apis.length})`} items={a.apis.map((x) => (
+        <Block title={`APIs called (${a.apis.length})`} items={a.apis.map((x) => (
           <div key={x.url} className="issue">
             <span className="mono truncate" title={x.url}>{shortUrl(x.url, x.first_party)}</span>
-            <span className="muted small nowrap">{x.first_party ? 'propriu' : 'extern'}</span>
+            <span className="muted small nowrap">{x.first_party ? 'first-party' : 'external'}</span>
           </div>
         ))} />
-        <Block title={`Domenii terțe (${a.third_parties.length})`} items={a.third_parties.map((t) => (
+        <Block title={`Third-party domains (${a.third_parties.length})`} items={a.third_parties.map((t) => (
           <div key={t.host} className="issue">
             <span className="mono truncate" title={t.host}>{t.host}</span>
-            <span className="muted small nowrap">{t.requests} cereri</span>
+            <span className="muted small nowrap">{t.requests} requests</span>
           </div>
         ))} />
       </div>
@@ -236,10 +236,10 @@ function Block({ title, items }: { title: string; items: ReactNode[] }) {
     <div style={{ minWidth: 0 }}>
       <div className="label" style={{ marginBottom: '0.4rem' }}>{title}</div>
       <div className="issue-list" style={{ marginTop: 0 }}>
-        {items.length ? shown : <span className="muted small">Nimic detectat</span>}
+        {items.length ? shown : <span className="muted small">Nothing detected</span>}
         {items.length > PREVIEW && (
           <button className="fold" onClick={() => setAll(!all)}>
-            {all ? 'Arată mai puțin' : `+${items.length - PREVIEW} mai multe`}
+            {all ? 'Show less' : `+${items.length - PREVIEW} more`}
           </button>
         )}
       </div>

@@ -41,7 +41,7 @@ export function Sites() {
     try {
       parsed = new URL(normalizeUrl(url))
     } catch {
-      setError('URL invalid.')
+      setError('Invalid URL.')
       return
     }
     setBusy(true)
@@ -53,7 +53,7 @@ export function Sites() {
   }
 
   async function deleteSite(s: Site) {
-    if (!confirm(`Ștergi ${s.name ?? s.url}? Se șterg și testele, rulările și rapoartele.`)) return
+    if (!confirm(`Delete ${s.name ?? s.url}? Its tests, runs and reports will be deleted too.`)) return
     const { error } = await supabase.from('sites').delete().eq('id', s.id)
     if (error) setError(error.message)
     else setSites((prev) => prev.filter((x) => x.id !== s.id))
@@ -64,31 +64,31 @@ export function Sites() {
       <section className="hero-box">
         <motion.div variants={fadeUp}><span className="chip accent">Website Tester</span></motion.div>
         <motion.h1 variants={fadeUp} className="gradient-text" style={{ marginTop: '1rem' }}>
-          Introdu URL-ul și descoperă<br />ce nu funcționează pe site-ul tău
+          Enter a URL and find out<br />what’s not working on your website
         </motion.h1>
         <motion.p variants={fadeUp} className="muted">
-          Verificăm disponibilitatea, viteza, link-urile, SEO și securitatea. Apoi monitorizăm site-ul continuu.
+          We check availability, speed, links, SEO and security. Then we keep monitoring your site.
         </motion.p>
         <motion.form variants={fadeUp} className="url-form" onSubmit={addSite}>
-          <input placeholder="magazinul-meu.ro" value={url} onChange={(e) => setUrl(e.target.value)} required />
+          <input placeholder="my-store.com" value={url} onChange={(e) => setUrl(e.target.value)} required />
           <motion.button className="btn" disabled={busy} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            {busy ? <span className="spinner" /> : null} Analizează
+            {busy ? <span className="spinner" /> : null} Analyze
           </motion.button>
         </motion.form>
         {error && <p className="notice error">{error}</p>}
         <motion.div variants={fadeUp} className="hero-chips">
-          {['Disponibilitate', 'Viteză', 'Link-uri stricate', 'SEO & mobil', 'Securitate'].map((c) => (
+          {['Availability', 'Speed', 'Broken links', 'SEO & mobile', 'Security'].map((c) => (
             <span key={c} className="chip">{c}</span>
           ))}
         </motion.div>
       </section>
 
       <div className="section-head">
-        <h2>Site-urile mele</h2>
-        <span className="muted small">{sites.length} {sites.length === 1 ? 'site' : 'site-uri'}</span>
+        <h2>My sites</h2>
+        <span className="muted small">{sites.length} {sites.length === 1 ? 'site' : 'sites'}</span>
       </div>
       {sites.length === 0 ? (
-        <p className="muted">Niciun site încă. Introdu primul URL mai sus.</p>
+        <p className="muted">No sites yet. Enter your first URL above.</p>
       ) : (
         <motion.div className="grid" variants={stagger}>
           {sites.map((s) => {
@@ -102,15 +102,15 @@ export function Sites() {
                     <div className="title truncate">{o?.title ?? s.name ?? s.url}</div>
                     <div className="muted small truncate">{s.url}</div>
                     <div className="chips" style={{ marginTop: '0.45rem' }}>
-                      {scanning && <span className="chip"><span className="spinner" /> Se analizează</span>}
-                      {s.scan_status === 'error' && <span className="badge badge-error">Eroare la analiză</span>}
-                      {o?.blocked && <span className="badge badge-paused">Blocat de site</span>}
+                      {scanning && <span className="chip"><span className="spinner" /> Analyzing</span>}
+                      {s.scan_status === 'error' && <span className="badge badge-error">Analysis error</span>}
+                      {o?.blocked && <span className="badge badge-paused">Blocked by site</span>}
                       {o?.type && <span className="chip">{o.type}</span>}
                     </div>
                   </div>
                   {!scanning && o && !o.blocked && <ScoreRing score={o.score} size={52} />}
                 </Link>
-                <button className="site-delete" title="Șterge site-ul" aria-label={`Șterge ${s.name ?? s.url}`} onClick={() => deleteSite(s)}>
+                <button className="site-delete" title="Delete site" aria-label={`Delete ${s.name ?? s.url}`} onClick={() => deleteSite(s)}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
                   </svg>

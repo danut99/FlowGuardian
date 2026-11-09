@@ -36,10 +36,10 @@ const SEP = '\u2060';
 const CODEISH = /\b(const|let|var|function|return|await|import|def|class)\b[^]*[;{}=]|=>/;
 
 const PLACEHOLDERS = [
-  [/lorem ipsum|dolor sit amet/i, 'text de umplutur\u0103 \u201eLorem ipsum\u201d', true],
+  [/lorem ipsum|dolor sit amet/i, 'placeholder text “Lorem ipsum”', true],
   [/\[object Object\]/, '[object Object]', true],
-  [/\{\{\s*[\w.]+\s*\}\}|\$\{\s*[\w.]+\s*\}|%%\w+%%/, 'variabil\u0103 ne\u00eenlocuit\u0103', true],
-  [/\b(TODO|FIXME)\b/, 'not\u0103 de lucru (TODO)', true],
+  [/\{\{\s*[\w.]+\s*\}\}|\$\{\s*[\w.]+\s*\}|%%\w+%%/, 'unreplaced variable', true],
+  [/\b(TODO|FIXME)\b/, 'work note (TODO)', true],
 ];
 // Only in short labels/prices ("Pre\u021b: NaN lei"); in prose they're usually a programming tutorial talking about them
 const MISSING_VALUE = /(^|[\s:=(])(undefined|NaN)(?=$|[\s.,;)!?]|\s*(lei|ron|eur|usd|\u20ac|\$|%))/;
@@ -86,7 +86,7 @@ export function textFindings(text) {
     if (hit) placeholders.push({ kind, severe, sample: snippet(hit.block, hit.m.index) });
   }
   const missing = first(blocks, (b) => b.length <= 60 && b.match(MISSING_VALUE));
-  if (missing) placeholders.push({ kind: 'valoare lips\u0103 (undefined/NaN)', severe: false, sample: missing.block.replaceAll(SEP, '') });
+  if (missing) placeholders.push({ kind: 'missing value (undefined/NaN)', severe: false, sample: missing.block.replaceAll(SEP, '') });
   if (placeholders.length) out.placeholders = placeholders;
 
   const moji = first(blocks, (b) => b.match(MOJIBAKE));
@@ -143,46 +143,47 @@ function similarPages(pages) {
 
 const path = (url) => { try { const u = new URL(url); return u.pathname + u.search; } catch { return url; } };
 const samePage = (a, b) => path(a).replace(/\/$/, '') === path(b).replace(/\/$/, '');
-const quote = (s) => `\u201e${s}\u201d`;
+const quote = (s) => `“${s}”`;
 
 export function textChecks(check, withPages, pages) {
   const analysed = pages.filter((p) => p.text);
   const having = (key) => analysed.filter((p) => p.text[key]);
   const n = analysed.length;
   if (!n) return [];
-  const scope = (list) => `${list.length} din ${n} ${n === 1 ? 'pagin\u0103' : 'pagini'}`;
+  const scope = (list) => `${list.length} of ${n} ${n === 1 ? 'page' : 'pages'}`;
+  const checked = `${n} ${n === 1 ? 'page' : 'pages'} checked`;
   const out = [];
 
   const ph = having('placeholders');
-  out.push(withPages(check('text', 'text_placeholder', 'F\u0103r\u0103 text de umplutur\u0103 sau variabile uitate',
+  out.push(withPages(check('text', 'text_placeholder', 'No placeholder text or leftover variables',
     !ph.length ? null : ph.some((p) => p.text.placeholders.some((x) => x.severe)) ? 'medium' : 'low',
-    ph.length ? `${scope(ph)}: ${ph[0].text.placeholders[0].kind} \u2014 ${quote(ph[0].text.placeholders[0].sample)}` : `${n} pagini verificate`),
+    ph.length ? `${scope(ph)}: ${ph[0].text.placeholders[0].kind} \u2014 ${quote(ph[0].text.placeholders[0].sample)}` : checked),
   ph.map((p) => ({ url: p.url, note: p.text.placeholders.map((x) => `${x.kind}: ${quote(x.sample)}`).join(' \u00b7 ') }))));
 
   const simple = [
-    ['mojibake', 'text_encoding', 'Caractere afi\u0219ate corect', 'medium', 'caractere stricate'],
-    ['repeated', 'text_repeated', 'F\u0103r\u0103 cuvinte repetate', 'low', 'cuv\u00e2nt repetat'],
-    ['cedilla', 'text_cedilla', 'Diacritice corecte (\u0219, \u021b)', 'low', '\u015f/\u0163 cu sedil\u0103'],
-    ['spacing', 'text_spacing', 'Spa\u021biu dup\u0103 punctua\u021bie', 'low', 'lipse\u0219te spa\u021biul'],
+    ['mojibake', 'text_encoding', 'Characters display correctly', 'medium', 'broken characters'],
+    ['repeated', 'text_repeated', 'No repeated words', 'low', 'repeated word'],
+    ['cedilla', 'text_cedilla', 'Correct Romanian diacritics (\u0219, \u021b)', 'low', '\u015f/\u0163 with cedilla'],
+    ['spacing', 'text_spacing', 'Space after punctuation', 'low', 'missing space'],
   ];
   for (const [key, id, label, severity, what] of simple) {
     const list = having(key);
     out.push(withPages(check('text', id, label, list.length ? severity : null,
-      list.length ? `${scope(list)}, ex. ${quote(list[0].text[key])}` : `${n} pagini verificate`),
+      list.length ? `${scope(list)}, e.g. ${quote(list[0].text[key])}` : checked),
     list.map((p) => ({ url: p.url, note: `${what}: ${quote(p.text[key])}` }))));
   }
 
   const dupBlocks = having('dup_blocks');
-  out.push(withPages(check('text', 'text_dup_blocks', 'F\u0103r\u0103 paragrafe duplicate pe aceea\u0219i pagin\u0103',
+  out.push(withPages(check('text', 'text_dup_blocks', 'No duplicate paragraphs on the same page',
     dupBlocks.length ? 'low' : null,
-    dupBlocks.length ? `${scope(dupBlocks)}, ex. ${quote(dupBlocks[0].text.dup_blocks.sample)}` : `${n} pagini verificate`),
-  dupBlocks.map((p) => ({ url: p.url, note: `${p.text.dup_blocks.count} paragrafe repetate, ex. ${quote(p.text.dup_blocks.sample)}` }))));
+    dupBlocks.length ? `${scope(dupBlocks)}, e.g. ${quote(dupBlocks[0].text.dup_blocks.sample)}` : checked),
+  dupBlocks.map((p) => ({ url: p.url, note: `${p.text.dup_blocks.count} repeated ${p.text.dup_blocks.count === 1 ? 'paragraph' : 'paragraphs'}, e.g. ${quote(p.text.dup_blocks.sample)}` }))));
 
   const pairs = similarPages(analysed);
-  out.push(withPages(check('text', 'text_dup_pages', 'Pagini cu con\u021binut propriu',
+  out.push(withPages(check('text', 'text_dup_pages', 'Pages with their own content',
     pairs.length ? 'low' : null,
-    pairs.length ? `${pairs.length} ${pairs.length === 1 ? 'pereche' : 'perechi'} de pagini aproape identice` : `${n} pagini comparate`),
-  pairs.map(([a, b, sim]) => ({ url: a.url, note: `${Math.round(sim * 100)}% identic\u0103 cu ${path(b.url)}` }))));
+    pairs.length ? `${pairs.length} ${pairs.length === 1 ? 'pair' : 'pairs'} of nearly identical pages` : `${n} ${n === 1 ? 'page' : 'pages'} compared`),
+  pairs.map(([a, b, sim]) => ({ url: a.url, note: `${Math.round(sim * 100)}% identical to ${path(b.url)}` }))));
 
   return out;
 }

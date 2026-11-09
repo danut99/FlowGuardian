@@ -4,16 +4,16 @@ import type { Run, RunDebug } from '../../types'
 
 function asMarkdown(run: Run, d: RunDebug) {
   return [
-    `### ${run.test.name}: ${run.error ?? run.failure_kind ?? 'eșec'}`,
+    `### ${run.test.name}: ${run.error ?? run.failure_kind ?? 'failure'}`,
     '',
     `- URL: ${d.url}`,
-    `- Când: ${new Date(run.created_at).toISOString()}`,
-    `- Pas: ${run.failed_step ?? '—'}`,
+    `- When: ${new Date(run.created_at).toISOString()}`,
+    `- Step: ${run.failed_step ?? '—'}`,
     `- Viewport: ${d.viewport ? `${d.viewport.width}×${d.viewport.height}` : '—'}`,
     `- User agent: ${d.user_agent ?? '—'}`,
-    ...(d.page_errors.length ? ['', '**Erori JavaScript**', ...d.page_errors.map((e) => `\`\`\`\n${e.stack ?? e.message}\n\`\`\``)] : []),
-    ...(d.console.length ? ['', '**Consolă**', ...d.console.map((c) => `- [${c.level}] ${c.text}${c.source ? ` (${c.source})` : ''}`)] : []),
-    ...(d.network.length ? ['', '**Cereri eșuate**', ...d.network.map((n) => `- ${n.method} ${n.url} → ${n.status || n.error}`)] : []),
+    ...(d.page_errors.length ? ['', '**JavaScript errors**', ...d.page_errors.map((e) => `\`\`\`\n${e.stack ?? e.message}\n\`\`\``)] : []),
+    ...(d.console.length ? ['', '**Console**', ...d.console.map((c) => `- [${c.level}] ${c.text}${c.source ? ` (${c.source})` : ''}`)] : []),
+    ...(d.network.length ? ['', '**Failed requests**', ...d.network.map((n) => `- ${n.method} ${n.url} → ${n.status || n.error}`)] : []),
   ].join('\n')
 }
 
@@ -33,22 +33,22 @@ export function DevDetails({ run }: { run: Run }) {
     <div className="dev">
       <div className="row">
         <span className="dev-tag">DEV</span>
-        <button className="btn ghost sm" onClick={copy}>{copied ? 'Copiat ✓' : 'Copiază pentru tichet'}</button>
+        <button className="btn ghost sm" onClick={copy}>{copied ? 'Copied ✓' : 'Copy for ticket'}</button>
       </div>
       <dl className="dev-meta">
         <dt>URL</dt><dd className="mono">{d.url}</dd>
         {d.viewport && <><dt>Viewport</dt><dd className="mono">{d.viewport.width}×{d.viewport.height}</dd></>}
-        {d.title && <><dt>Titlu</dt><dd>{d.title}</dd></>}
+        {d.title && <><dt>Title</dt><dd>{d.title}</dd></>}
       </dl>
       {d.page_errors.length > 0 && (
         <details open>
-          <summary>Erori JavaScript ({d.page_errors.length})</summary>
+          <summary>JavaScript errors ({d.page_errors.length})</summary>
           {d.page_errors.map((e, i) => <pre key={i} className="dev-pre">{e.stack ?? e.message}</pre>)}
         </details>
       )}
       {d.network.length > 0 && (
         <details open>
-          <summary>Cereri eșuate ({d.network.length})</summary>
+          <summary>Failed requests ({d.network.length})</summary>
           <div className="issue-list">
             {d.network.map((n, i) => (
               <div key={i} className="issue">
@@ -61,7 +61,7 @@ export function DevDetails({ run }: { run: Run }) {
       )}
       {d.console.length > 0 && (
         <details>
-          <summary>Consolă ({d.console.length})</summary>
+          <summary>Console ({d.console.length})</summary>
           {d.console.map((c, i) => (
             <div key={i} className={`dev-log ${c.level}`}>
               <span className="mono">{c.text}</span>
@@ -71,7 +71,7 @@ export function DevDetails({ run }: { run: Run }) {
         </details>
       )}
       {!d.page_errors.length && !d.network.length && !d.console.length && (
-        <p className="muted small">Nicio eroare în consolă și nicio cerere eșuată în timpul testului.</p>
+        <p className="muted small">No console errors and no failed requests during the test.</p>
       )}
     </div>
   )

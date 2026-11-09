@@ -77,7 +77,7 @@ async function processRun(browser, run) {
     .single();
   if (error) return finish(run, { status: 'error', error: error.message }, started);
   // Runs can be queued manually from the dashboard, so re-check ownership verification here.
-  if (!test.site.verified_at) return finish(run, { status: 'error', error: 'Site neverificat.' }, started);
+  if (!test.site.verified_at) return finish(run, { status: 'error', error: 'Site not verified.' }, started);
 
   let result = await attempt(browser, test);
   if (result.failure?.kind === 'real_bug' || result.failure?.kind === 'timeout') {
@@ -88,7 +88,7 @@ async function processRun(browser, run) {
     await finish(run, { status: 'passed' }, started);
     if (result.drift) {
       await openIncident(run, 'maintenance',
-        `${test.name}: pasul ${result.drift.position} a mers doar cu un selector de rezervă.`, result.drift.locators);
+        `${test.name}: step ${result.drift.position} only worked with a fallback selector.`, result.drift.locators);
     }
     console.log(`PASS ${test.name}`);
     return;
@@ -421,9 +421,9 @@ async function runApiMonitors() {
 
 async function processAi(browser, req) {
   const fail = (error) => db.from('ai_requests').update({ status: 'error', error }).eq('id', req.id);
-  if (!aiEnabled()) return fail('Asistentul AI nu e configurat (lipsește GEMINI_API_KEY).');
+  if (!aiEnabled()) return fail('The AI assistant is not configured (GEMINI_API_KEY is missing).');
   const { data: site } = await db.from('sites').select('url').eq('id', req.site_id).single();
-  if (!site) return fail('Site inexistent.');
+  if (!site) return fail('Site not found.');
   let pageUrl = site.url;
   try {
     if (req.page_url && new URL(req.page_url).host === new URL(site.url).host) pageUrl = req.page_url;
@@ -435,7 +435,7 @@ async function processAi(browser, req) {
     }).eq('id', req.id);
     console.log(`AI ${pageUrl}: ${r.draft ? (r.verified ? 'test verified' : 'test failed dry-run') : 'no test'}`);
   } catch (e) {
-    await fail(/Gemini/.test(e?.message) ? 'Asistentul AI nu răspunde acum. Încearcă din nou peste un minut.' : (e?.message ?? String(e)).split('\n')[0]);
+    await fail(/Gemini/.test(e?.message) ? 'The AI assistant is not responding right now. Try again in a minute.' : (e?.message ?? String(e)).split('\n')[0]);
     console.log(`AI ERROR: ${e?.message ?? e}`);
   }
 }

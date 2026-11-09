@@ -31,17 +31,17 @@ export function Layout({ email, children }: { email?: string; children: ReactNod
               <NavLink key={m.to} to={m.to} className={`module-link${active ? ' active' : ''}`}>
                 {active && <motion.div layoutId="module-pill" className="module-pill" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                 <span>{m.label}</span>
-                {m.soon && <em className="soon">curând</em>}
+                {m.soon && <em className="soon">soon</em>}
               </NavLink>
             )
           })}
         </nav>
         <div className="topbar-right">
-          <button className={`dev-toggle${dev ? ' on' : ''}`} onClick={() => setDev(!dev)} title="Afișează detalii tehnice: stack trace, cereri eșuate, export Playwright">
-            <span className="dev-switch"><motion.span layout className="dev-knob" /></span> Mod developer
+          <button className={`dev-toggle${dev ? ' on' : ''}`} onClick={() => setDev(!dev)} title="Show technical details: stack traces, failed requests, Playwright export">
+            <span className="dev-switch"><motion.span layout className="dev-knob" /></span> Developer mode
           </button>
           <span className="muted small">{email}</span>
-          <button className="btn ghost sm" onClick={() => supabase.auth.signOut()}>Ieșire</button>
+          <button className="btn ghost sm" onClick={() => supabase.auth.signOut()}>Sign out</button>
         </div>
       </header>
       <main className="content">{children}</main>

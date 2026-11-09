@@ -12,13 +12,13 @@ const CAP_MS = 45_000
 const barColor = (ms: number | null | undefined, good: number, ok: number) =>
   ms == null ? 'var(--bad)' : ms <= good ? 'var(--ok)' : ms <= ok ? 'var(--warn)' : 'var(--bad)'
 
-const lcpLabel = (ms: number | null | undefined) => (ms == null ? 'nu apare în 45 s' : `${(ms / 1000).toFixed(1)} s`)
+const lcpLabel = (ms: number | null | undefined) => (ms == null ? 'doesn\'t appear within 45 s' : `${(ms / 1000).toFixed(1)} s`)
 
 function NetworkBars({ results }: { results: NetworkResult[] }) {
   const rows = results.filter((r) => !r.error)
   return (
     <div style={{ display: 'grid', gap: '0.9rem' }}>
-      <p className="muted small" style={{ margin: 0 }}>Telefon simulat, procesor încetinit. Când apare conținutul principal (LCP).</p>
+      <p className="muted small" style={{ margin: 0 }}>Simulated phone, slowed-down CPU. When the main content appears (LCP).</p>
       {rows.map((r) => {
         const ms = r.lcp_ms ?? null
         const pct = Math.min(100, ((ms ?? CAP_MS) / CAP_MS) * 100)
@@ -42,14 +42,14 @@ function NetworkBars({ results }: { results: NetworkResult[] }) {
 }
 
 const GROUPS: { id: CheckGroup; label: string; hint: string }[] = [
-  { id: 'availability', label: 'Disponibilitate', hint: 'Site-ul răspunde și e accesibil securizat' },
-  { id: 'performance', label: 'Viteză', hint: 'Cât așteaptă vizitatorii' },
-  { id: 'network', label: 'Conexiune slabă', hint: 'Simulare telefon pe 4G slab și 3G' },
-  { id: 'content', label: 'Funcționalitate', hint: 'Link-uri, imagini și erori în pagină' },
-  { id: 'text', label: 'Text și conținut', hint: 'Greșeli de scriere, text uitat, caractere stricate, duplicate' },
-  { id: 'seo', label: 'SEO & mobil', hint: 'Cum te văd Google și telefoanele' },
-  { id: 'security', label: 'Securitate', hint: 'Recomandări de configurare (nu vulnerabilități)' },
-  { id: 'compliance', label: 'Conformitate legală', hint: 'Ce cer legile de protecția datelor și a consumatorilor din majoritatea țărilor' },
+  { id: 'availability', label: 'Availability', hint: 'The site responds and is reachable securely' },
+  { id: 'performance', label: 'Speed', hint: 'How long visitors wait' },
+  { id: 'network', label: 'Slow connection', hint: 'Phone simulated on slow 4G and 3G' },
+  { id: 'content', label: 'Functionality', hint: 'Links, images and errors on the page' },
+  { id: 'text', label: 'Text & content', hint: 'Typos, leftover text, broken characters, duplicates' },
+  { id: 'seo', label: 'SEO & mobile', hint: 'How Google and phones see you' },
+  { id: 'security', label: 'Security', hint: 'Configuration recommendations (not vulnerabilities)' },
+  { id: 'compliance', label: 'Legal compliance', hint: 'What data protection and consumer laws require in most countries' },
 ]
 
 const worst = (statuses: CheckStatus[]): CheckStatus =>
@@ -73,24 +73,24 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
   if (scanning && !o?.partial) {
     return (
       <div className="card">
-        <Radar label="Analizăm site-ul…" />
+        <Radar label="Scanning the site…" />
         <p className="muted" style={{ textAlign: 'center', marginTop: '-1.5rem' }}>
-          Parcurgem paginile, verificăm link-urile, viteza, SEO, securitatea și simulăm o conexiune slabă. Durează în jur de un minut.
+          We go through the pages, check links, speed, SEO and security, and simulate a slow connection. Takes about a minute.
         </p>
       </div>
     )
   }
   if (site.scan_status === 'error') {
-    return <div className="card"><p className="notice error" style={{ margin: 0 }}>Nu am putut analiza site-ul: {site.scan_error}</p></div>
+    return <div className="card"><p className="notice error" style={{ margin: 0 }}>Couldn't scan the site: {site.scan_error}</p></div>
   }
-  if (!o) return <p className="muted">Nicio analiză încă.</p>
+  if (!o) return <p className="muted">No scan yet.</p>
   if (o.blocked) {
     return (
       <div className="card">
-        <h2>Site-ul blochează vizitatorii automați</h2>
+        <h2>The site blocks automated visitors</h2>
         <p className="muted">
-          Serverul a răspuns cu HTTP {o.status} — protecție anti-bot (ex. Cloudflare, Akamai). Ca să putem testa,
-          proprietarul site-ului trebuie să permită accesul FlowGuardian (allowlist).
+          The server responded with HTTP {o.status} — anti-bot protection (e.g. Cloudflare, Akamai). For us to test it,
+          the site owner needs to allow FlowGuardian access (allowlist).
         </p>
       </div>
     )
@@ -127,11 +127,11 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
       {scanning && (
         <div className="notice-progress">
           <span className="spinner" />
-          <span>Primele rezultate, din pagina principală. Continuăm cu restul paginilor, textul (greșeli, duplicate), link-urile și conexiunea slabă — se actualizează singur în ~2 minute.</span>
+          <span>First results, from the home page. We're continuing with the other pages, text (typos, duplicates), links and slow connection — this updates by itself in ~2 minutes.</span>
         </div>
       )}
       <motion.div className="summary" variants={stagger}>
-        {([['fail', 'Probleme'], ['warn', 'Recomandări'], ['pass', 'În regulă']] as const).map(([k, label]) => (
+        {([['fail', 'Problems'], ['warn', 'Recommendations'], ['pass', 'All good']] as const).map(([k, label]) => (
           <motion.div key={k} variants={fadeUp} className="card stat">
             <span className={`dot ${k}`} />
             <div><b>{counts[k]}</b><div className="muted small">{label}</div></div>
@@ -140,9 +140,9 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
       </motion.div>
 
       <div className="acc-toolbar">
-        <button className="fold" onClick={() => setAll(true)}>Deschide tot</button>
+        <button className="fold" onClick={() => setAll(true)}>Expand all</button>
         <span className="muted small">·</span>
-        <button className="fold" onClick={() => setAll(false)}>Închide tot</button>
+        <button className="fold" onClick={() => setAll(false)}>Collapse all</button>
       </div>
 
       <motion.div className="acc-list" variants={stagger}>
@@ -155,7 +155,7 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
               <Accordion
                 open={isOpen(g.id)} onToggle={() => toggle(g.id)} className={`group ${worst(g.checks.map((c) => c.status))}`}
                 title={<h3><StatusIcon status={worst(g.checks.map((c) => c.status))} /> {g.label}</h3>}
-                summary={[fails && plural(fails, 'problemă', 'probleme'), warns && plural(warns, 'recomandare', 'recomandări')].filter(Boolean).join(' · ') + ` — ${g.hint}`}
+                summary={[fails && plural(fails, 'problem', 'problems'), warns && plural(warns, 'recommendation', 'recommendations')].filter(Boolean).join(' · ') + ` — ${g.hint}`}
                 aside={<span className="muted small">{passed}/{g.checks.length} OK</span>}
               >
                 <GroupBody checks={g.checks} />
@@ -168,7 +168,7 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
           <motion.div variants={fadeUp}>
             <Accordion
               open={isOpen('network')} onToggle={() => toggle('network')}
-              title={<h3>Cum arată site-ul pe o conexiune slabă</h3>}
+              title={<h3>How the site looks on a slow connection</h3>}
               summary={network.map((r) => `${r.label}: ${lcpLabel(r.lcp_ms)}`).join(' · ')}
             >
               <NetworkBars results={network} />
@@ -180,26 +180,26 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
           <motion.div variants={fadeUp}>
             <Accordion
               open={isOpen('issues')} onToggle={() => toggle('issues')}
-              title={<h3>Ce trebuie reparat</h3>}
+              title={<h3>What needs fixing</h3>}
               summary={[
-                broken_links.length && plural(broken_links.length, 'link stricat', 'link-uri stricate'),
-                broken_images.length && plural(broken_images.length, 'imagine lipsă', 'imagini lipsă'),
-                js_errors.length && plural(js_errors.length, 'eroare JS', 'erori JS'),
-                slow_pages.length && plural(slow_pages.length, 'pagină lentă', 'pagini lente'),
+                broken_links.length && plural(broken_links.length, 'broken link', 'broken links'),
+                broken_images.length && plural(broken_images.length, 'missing image', 'missing images'),
+                js_errors.length && plural(js_errors.length, 'JS error', 'JS errors'),
+                slow_pages.length && plural(slow_pages.length, 'slow page', 'slow pages'),
               ].filter(Boolean).join(' · ')}
               aside={<span className="count">{issueCount}</span>}
             >
               <div className="list">
-                <IssueBlock title="Link-uri stricate" status="fail" items={broken_links.map((l) => ({
-                  key: l.url, main: l.url, side: `${l.status || 'fără răspuns'} · pe ${l.pages} ${l.pages === 1 ? 'pagină' : 'pagini'}`,
+                <IssueBlock title="Broken links" status="fail" items={broken_links.map((l) => ({
+                  key: l.url, main: l.url, side: `${l.status || 'no response'} · on ${l.pages} ${l.pages === 1 ? 'page' : 'pages'}`,
                 }))} />
-                <IssueBlock title="Imagini care nu se încarcă" status="warn" items={broken_images.map((i) => ({
-                  key: i.url, main: i.url, side: `${i.status || 'eșuat'} · pe ${i.pages} ${i.pages === 1 ? 'pagină' : 'pagini'}`,
+                <IssueBlock title="Images that don't load" status="warn" items={broken_images.map((i) => ({
+                  key: i.url, main: i.url, side: `${i.status || 'failed'} · on ${i.pages} ${i.pages === 1 ? 'page' : 'pages'}`,
                 }))} />
-                <IssueBlock title="Erori JavaScript" status="warn" items={js_errors.map((e) => ({
-                  key: e.message, main: e.message, side: `pe ${e.pages} ${e.pages === 1 ? 'pagină' : 'pagini'}`,
+                <IssueBlock title="JavaScript errors" status="warn" items={js_errors.map((e) => ({
+                  key: e.message, main: e.message, side: `on ${e.pages} ${e.pages === 1 ? 'page' : 'pages'}`,
                 }))} />
-                <IssueBlock title="Pagini lente" status="warn" items={slow_pages.map((p) => ({
+                <IssueBlock title="Slow pages" status="warn" items={slow_pages.map((p) => ({
                   key: p.url, main: p.url, side: `${(p.load_ms / 1000).toFixed(1)} s`,
                 }))} />
               </div>
@@ -211,9 +211,9 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
           <motion.div variants={fadeUp}>
             <Accordion
               open={isOpen('ok')} onToggle={() => toggle('ok')} className="group pass"
-              title={<h3><StatusIcon status="pass" /> Totul în regulă</h3>}
+              title={<h3><StatusIcon status="pass" /> All good</h3>}
               summary={okGroups.map((g) => g.label).join(' · ')}
-              aside={<span className="muted small">{okGroups.reduce((s, g) => s + g.checks.length, 0)} verificări</span>}
+              aside={<span className="muted small">{plural(okGroups.reduce((s, g) => s + g.checks.length, 0), 'check', 'checks')}</span>}
             >
               <div className="groups-ok">
                 {okGroups.map((g) => <GroupCard key={g.id} label={g.label} hint={g.hint} checks={g.checks} compact />)}
@@ -226,12 +226,12 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
           <motion.div variants={fadeUp}>
             <Accordion
               open={isOpen('schema')} onToggle={() => toggle('schema')}
-              title={<h3>Schema site-ului</h3>}
+              title={<h3>Site structure</h3>}
               summary={[
-                o.map?.nodes.length && plural(o.map.nodes.length, 'pagină în hartă', 'pagini în hartă'),
-                o.architecture?.services.length && plural(o.architecture.services.length, 'serviciu extern', 'servicii externe'),
-                o.architecture?.forms.length && plural(o.architecture.forms.length, 'formular', 'formulare'),
-              ].filter(Boolean).join(' · ') || 'Harta paginilor și tehnologiile folosite'}
+                o.map?.nodes.length && plural(o.map.nodes.length, 'page in the map', 'pages in the map'),
+                o.architecture?.services.length && plural(o.architecture.services.length, 'external service', 'external services'),
+                o.architecture?.forms.length && plural(o.architecture.forms.length, 'form', 'forms'),
+              ].filter(Boolean).join(' · ') || 'Page map and technologies used'}
             >
               <div style={{ display: 'grid', gap: '0.9rem' }}>
                 {!!o.map?.nodes.length && <SiteMap map={o.map} />}
@@ -245,8 +245,8 @@ export function OverviewTab({ site, pages, onDeep }: { site: Site; pages: PageCh
           <motion.div variants={fadeUp}>
             <Accordion
               open={isOpen('pages')} onToggle={() => toggle('pages')}
-              title={<h3>Analiza fiecărei pagini</h3>}
-              summary={`${plural(pages.length, 'pagină verificată', 'pagini verificate')}${pages.some((p) => (p.score ?? 100) < 60) ? ` · ${pages.filter((p) => (p.score ?? 100) < 60).length} cu scor slab` : ''}`}
+              title={<h3>Page-by-page analysis</h3>}
+              summary={`${plural(pages.length, 'page checked', 'pages checked')}${pages.some((p) => (p.score ?? 100) < 60) ? ` · ${pages.filter((p) => (p.score ?? 100) < 60).length} with a low score` : ''}`}
               aside={<span className="count">{pages.length}</span>}
             >
               <PagesPanel site={site} pages={pages} onDeep={onDeep} />
@@ -269,7 +269,7 @@ function GroupBody({ checks }: { checks: Check[] }) {
         <>
           <button className="fold" onClick={() => setOpen(!open)}>
             <motion.span animate={{ rotate: open ? 90 : 0 }} style={{ display: 'inline-block' }}>›</motion.span>
-            {open ? 'Ascunde' : `${passed.length} ${passed.length === 1 ? 'verificare' : 'verificări'} în regulă`}
+            {open ? 'Hide' : `${passed.length} ${passed.length === 1 ? 'check' : 'checks'} OK`}
           </button>
           <AnimatePresence initial={false}>
             {open && (
@@ -295,12 +295,12 @@ function CheckRow({ c }: { c: Check }) {
         <div className="label">{c.label}</div>
         <div className="detail">
           {c.detail}
-          {c.verdict === 'needs_validation' && <span className="chip" style={{ marginLeft: '0.4rem' }}>nemăsurat</span>}
+          {c.verdict === 'needs_validation' && <span className="chip" style={{ marginLeft: '0.4rem' }}>not measured</span>}
         </div>
         {!!c.pages?.length && (
           <button className="fold" onClick={() => setShowPages(!showPages)}>
             <motion.span animate={{ rotate: showPages ? 90 : 0 }} style={{ display: 'inline-block' }}>›</motion.span>
-            {showPages ? 'Ascunde paginile' : `Vezi ${c.pages.length === 1 ? 'pagina' : `cele ${c.pages.length} pagini`}`}
+            {showPages ? 'Hide pages' : `See ${c.pages.length === 1 ? 'the page' : `all ${c.pages.length} pages`}`}
           </button>
         )}
         <AnimatePresence initial={false}>
@@ -323,14 +323,14 @@ function CheckRow({ c }: { c: Check }) {
             <motion.div
               className="help" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
             >
-              <p><b>De ce contează:</b> {help.why}</p>
-              {c.status !== 'pass' && <p><b>Cum repari:</b> {help.fix}</p>}
+              <p><b>Why it matters:</b> {help.why}</p>
+              {c.status !== 'pass' && <p><b>How to fix:</b> {help.fix}</p>}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
       {help && (
-        <button className={`info-btn${info ? ' on' : ''}`} onClick={() => setInfo(!info)} aria-label="Detalii" title="De ce contează și cum repari">
+        <button className={`info-btn${info ? ' on' : ''}`} onClick={() => setInfo(!info)} aria-label="Details" title="Why it matters and how to fix it">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
             <circle cx="12" cy="12" r="9.5" /><path d="M12 11v6M12 7.5h.01" />
           </svg>
@@ -357,7 +357,7 @@ function GroupCard({ label, hint, checks, compact }: { label: string; hint: stri
         <>
           <button className="fold" onClick={() => setOpen(!open)}>
             <motion.span animate={{ rotate: open ? 90 : 0 }} style={{ display: 'inline-block' }}>›</motion.span>
-            {open ? 'Ascunde' : `${passed.length} ${passed.length === 1 ? 'verificare' : 'verificări'} în regulă`}
+            {open ? 'Hide' : `${passed.length} ${passed.length === 1 ? 'check' : 'checks'} OK`}
           </button>
           <AnimatePresence initial={false}>
             {open && (

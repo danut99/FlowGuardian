@@ -15,7 +15,7 @@ class HealthFailure extends Error {
 async function open(page, url, waitUntil = 'load') {
   const res = await page.goto(url, { waitUntil, timeout: NAV_TIMEOUT });
   const status = res?.status() ?? 0;
-  if (status >= 400) throw new HealthFailure(`Pagina a răspuns cu HTTP ${status}.`);
+  if (status >= 400) throw new HealthFailure(`The page responded with HTTP ${status}.`);
   return res;
 }
 
@@ -24,19 +24,19 @@ const CHECKS = {
     const started = Date.now();
     await open(page, site.href);
     const ms = Date.now() - started;
-    if (ms > Number(limit)) throw new HealthFailure(`Pagina s-a încărcat în ${(ms / 1000).toFixed(1)} s (limita: ${limit / 1000} s).`);
+    if (ms > Number(limit)) throw new HealthFailure(`The page loaded in ${(ms / 1000).toFixed(1)} s (limit: ${limit / 1000} s).`);
   },
 
   async ssl(_page, site, minDays) {
     const days = await certDaysLeft(site.hostname);
-    if (days == null) throw new HealthFailure('Nu am putut citi certificatul SSL.');
-    if (days < 0) throw new HealthFailure('Certificatul SSL a expirat.');
-    if (days < Number(minDays)) throw new HealthFailure(`Certificatul SSL expiră în ${days} zile.`);
+    if (days == null) throw new HealthFailure('Could not read the SSL certificate.');
+    if (days < 0) throw new HealthFailure('The SSL certificate has expired.');
+    if (days < Number(minDays)) throw new HealthFailure(`The SSL certificate expires in ${days} ${days === 1 ? 'day' : 'days'}.`);
   },
 
   async https_redirect(page, site) {
     if ((await httpRedirectsToHttps(page.context(), site.host)) === false) {
-      throw new HealthFailure('Varianta http:// nu mai redirecționează spre https://.');
+      throw new HealthFailure('The http:// version no longer redirects to https://.');
     }
   },
 
@@ -45,7 +45,7 @@ const CHECKS = {
     page.on('pageerror', (e) => errors.push(e.message));
     await open(page, site.href);
     await page.waitForTimeout(2000);
-    if (errors.length) throw new HealthFailure(`${errors.length} erori JavaScript: ${errors[0].slice(0, 200)}`);
+    if (errors.length) throw new HealthFailure(`${errors.length} JavaScript ${errors.length === 1 ? 'error' : 'errors'}: ${errors[0].slice(0, 200)}`);
   },
 
   async broken_links(page, site) {
@@ -62,10 +62,10 @@ const CHECKS = {
         // One retry: a single dropped request isn't a dead link
         if (s === 0) s = await status(l);
         // Auth/bot statuses aren't proof of a dead link
-        if (s === 0 || (s >= 400 && ![401, 403, 405, 429].includes(s))) broken.push(`${l} (${s || 'fără răspuns'})`);
+        if (s === 0 || (s >= 400 && ![401, 403, 405, 429].includes(s))) broken.push(`${l} (${s || 'no response'})`);
       }));
     }
-    if (broken.length) throw new HealthFailure(`${broken.length} link-uri stricate: ${broken.slice(0, 3).join(', ')}`);
+    if (broken.length) throw new HealthFailure(`${broken.length} broken ${broken.length === 1 ? 'link' : 'links'}: ${broken.slice(0, 3).join(', ')}`);
   },
 
   async broken_images(page, site) {
@@ -73,15 +73,15 @@ const CHECKS = {
     page.on('response', (r) => { if (r.request().resourceType() === 'image' && r.status() >= 400) failed.push(r.url()); });
     await open(page, site.href);
     await page.waitForTimeout(1500);
-    if (failed.length) throw new HealthFailure(`${failed.length} imagini nu se încarcă: ${failed[0]}`);
+    if (failed.length) throw new HealthFailure(`${failed.length} ${failed.length === 1 ? 'image does' : 'images do'} not load: ${failed[0]}`);
   },
 
   async content(page, site) {
     await open(page, site.href);
     await page.waitForTimeout(1500);
     const { title, text } = await page.evaluate(() => ({ title: document.title.trim(), text: document.body?.innerText.trim().length ?? 0 }));
-    if (!title) throw new HealthFailure('Pagina nu mai are titlu.');
-    if (text < 100) throw new HealthFailure('Pagina pare goală (aproape fără text vizibil).');
+    if (!title) throw new HealthFailure('The page no longer has a title.');
+    if (text < 100) throw new HealthFailure('The page looks empty (almost no visible text).');
   },
 
   async mobile(page, site) {
@@ -92,12 +92,12 @@ const CHECKS = {
     await page.waitForTimeout(1500);
     const r = await page.evaluate(findOverflow);
     if (r.overflow <= 8) return;
-    const causes = r.culprits.length ? ` Cauza: ${r.culprits.map((c) => c.desc).join(', ')}.` : '';
+    const causes = r.culprits.length ? ` Cause: ${r.culprits.map((c) => c.desc).join(', ')}.` : '';
     const clipY = Math.max(0, Math.min((r.culprits[0]?.top ?? 0) - 120, r.height - 844));
     const shot = await page.screenshot({
       fullPage: true, clip: { x: 0, y: clipY, width: r.width, height: Math.min(844, r.height) },
     }).catch(() => null);
-    throw new HealthFailure(`Pe telefon pagina iese din ecran cu ${r.overflow}px (scroll orizontal).${causes}`, shot);
+    throw new HealthFailure(`On a phone the page overflows the screen by ${r.overflow}px (horizontal scroll).${causes}`, shot);
   },
 
   // Watches desktop and phone from the first byte: preloaders that hang or linger, and sideways scroll while loading
@@ -112,7 +112,7 @@ const CHECKS = {
         if (p !== page) await p.close();
       }
       // A hung loader hangs on every device; don't wait another 20 s to say it again
-      if (problems.some((x) => x.message.includes('blocată'))) break;
+      if (problems.some((x) => x.message.includes('stuck'))) break;
     }
     if (problems.length) {
       // One screenshot per run: the marked overflow says most, then the phone view, desktop last
@@ -123,9 +123,9 @@ const CHECKS = {
 
   async slow_network(page, site, limit) {
     const r = await measure(page.context().browser(), site.href, PROFILES.find((p) => p.id === 'slow4g'));
-    if (r.lcp_ms == null) throw new HealthFailure('Pe 4G slab conținutul principal nu apare în 45 s.');
+    if (r.lcp_ms == null) throw new HealthFailure('On slow 4G the main content does not appear within 45 s.');
     if (r.lcp_ms > Number(limit)) {
-      throw new HealthFailure(`Pe 4G slab conținutul principal apare după ${(r.lcp_ms / 1000).toFixed(1)} s (limita: ${limit / 1000} s).`);
+      throw new HealthFailure(`On slow 4G the main content appears after ${(r.lcp_ms / 1000).toFixed(1)} s (limit: ${limit / 1000} s).`);
     }
   },
 };
@@ -134,7 +134,7 @@ CHECKS.mobile_load = CHECKS.load_experience;
 
 const DEVICES = [
   { label: 'Desktop', viewport: { width: 1366, height: 768 }, phone: false },
-  { label: 'Telefon', viewport: { width: 390, height: 844 }, phone: true },
+  { label: 'Phone', viewport: { width: 390, height: 844 }, phone: true },
 ];
 const STUCK_MS = 20_000;
 const sec = (ms) => `${(ms / 1000).toFixed(1)} s`;
@@ -174,7 +174,7 @@ async function watchLoad(page, site, device, limit) {
   let loadedAt = null;
   page.waitForLoadState('load', { timeout: NAV_TIMEOUT }).then(() => { loadedAt = Date.now(); }, () => {});
   const res = await page.goto(site.href, { waitUntil: 'commit', timeout: NAV_TIMEOUT });
-  if ((res?.status() ?? 0) >= 400) throw new HealthFailure(`Pagina a răspuns cu HTTP ${res.status()}.`);
+  if ((res?.status() ?? 0) >= 400) throw new HealthFailure(`The page responded with HTTP ${res.status()}.`);
 
   let readyAt = null;
   let cover = null;
@@ -210,24 +210,24 @@ async function watchLoad(page, site, device, limit) {
   }
 
   const problems = [];
-  const what = cover ? `ecranul de încărcare ${cover}` : 'pagina albă';
+  const what = cover ? `the loading screen ${cover}` : 'a blank page';
   const rank = (overflowShot) => (overflowShot ? 0 : 1) + (device.phone ? 0 : 2);
   if (readyAt == null) {
     problems.push({
-      message: `${device.label}: pagina rămâne blocată pe ${what} după ${STUCK_MS / 1000} s.`,
+      message: `${device.label}: the page is stuck on ${what} after ${STUCK_MS / 1000} s.`,
       shot: await page.screenshot().catch(() => null), rank: rank(false),
     });
   } else if (readyAt > limit) {
-    problems.push({ message: `${device.label}: ${what} acoperă conținutul ${sec(readyAt)} (limita: ${sec(limit)}).`, shot: lateShot, rank: rank(false) });
+    problems.push({ message: `${device.label}: ${what} covers the content for ${sec(readyAt)} (limit: ${sec(limit)}).`, shot: lateShot, rank: rank(false) });
   }
   if (overflow) {
     const final = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth).catch(() => 0);
-    const causes = overflow.causes.length ? ` Cauza: ${overflow.causes.join(', ')}.` : '';
+    const causes = overflow.causes.length ? ` Cause: ${overflow.causes.join(', ')}.` : '';
     // Permanent phone overflow is the 'mobile' test's job
     if (final <= 8) {
-      problems.push({ message: `${device.label}: în timpul încărcării (la ${sec(overflow.at)}) pagina iese din ecran cu ${overflow.px}px.${causes}`, shot: overflow.shot, rank: rank(true) });
+      problems.push({ message: `${device.label}: while loading (at ${sec(overflow.at)}) the page overflows the screen by ${overflow.px}px.${causes}`, shot: overflow.shot, rank: rank(true) });
     } else if (!device.phone) {
-      problems.push({ message: `${device.label}: pagina iese din ecran cu ${final}px (scroll orizontal).${causes}`, shot: overflow.shot, rank: rank(true) });
+      problems.push({ message: `${device.label}: the page overflows the screen by ${final}px (horizontal scroll).${causes}`, shot: overflow.shot, rank: rank(true) });
     }
   }
   return problems;
@@ -277,7 +277,7 @@ function findOverflow() {
 export async function runCheck(page, site, spec) {
   const [name, arg] = (spec ?? '').split(':');
   const fn = CHECKS[name];
-  if (!fn) throw new Error(`Verificare necunoscută: ${spec}`);
+  if (!fn) throw new Error(`Unknown check: ${spec}`);
   try {
     await fn(page, site, arg);
     return null;
@@ -292,15 +292,15 @@ export const RETIRED_ESSENTIALS = ['mobile_load'];
 
 // Essential tests created for every site. `when` = overview check that must pass now (monitor regressions, not known issues).
 export const ESSENTIALS = [
-  { key: 'availability', name: 'Site-ul e disponibil', kind: 'page_load', freq: 60, steps: [{ action: 'goto' }] },
-  { key: 'speed', name: 'Pagina se încarcă în sub 5 secunde', freq: 360, when: 'load', check: 'speed:5000' },
-  { key: 'content', name: 'Conținutul paginii e vizibil', freq: 360, when: 'title', check: 'content' },
-  { key: 'ssl', name: 'Certificatul SSL e valabil', freq: 1440, when: 'cert', check: 'ssl:14' },
-  { key: 'https_redirect', name: 'HTTP redirecționează spre HTTPS', freq: 1440, when: 'redirect', check: 'https_redirect' },
-  { key: 'js_errors', name: 'Fără erori JavaScript', freq: 1440, when: 'js', check: 'js_errors' },
-  { key: 'broken_links', name: 'Link-urile din pagină funcționează', freq: 1440, when: 'links', check: 'broken_links' },
-  { key: 'broken_images', name: 'Imaginile se încarcă', freq: 1440, when: 'images', check: 'broken_images' },
-  { key: 'mobile', name: 'Pagina se vede corect pe telefon', freq: 1440, when: 'viewport', check: 'mobile' },
-  { key: 'load_experience', name: 'Încărcarea arată corect (preloader, scroll lateral)', freq: 1440, when: 'home', check: 'load_experience:5000' },
-  { key: 'slow_network', name: 'Se încarcă acceptabil pe 4G slab', freq: 1440, when: 'net_lcp', check: 'slow_network:10000' },
+  { key: 'availability', name: 'Site is up', kind: 'page_load', freq: 60, steps: [{ action: 'goto' }] },
+  { key: 'speed', name: 'Page loads in under 5 seconds', freq: 360, when: 'load', check: 'speed:5000' },
+  { key: 'content', name: 'Page content is visible', freq: 360, when: 'title', check: 'content' },
+  { key: 'ssl', name: 'SSL certificate is valid', freq: 1440, when: 'cert', check: 'ssl:14' },
+  { key: 'https_redirect', name: 'HTTP redirects to HTTPS', freq: 1440, when: 'redirect', check: 'https_redirect' },
+  { key: 'js_errors', name: 'No JavaScript errors', freq: 1440, when: 'js', check: 'js_errors' },
+  { key: 'broken_links', name: 'Links on the page work', freq: 1440, when: 'links', check: 'broken_links' },
+  { key: 'broken_images', name: 'Images load', freq: 1440, when: 'images', check: 'broken_images' },
+  { key: 'mobile', name: 'Page displays correctly on phones', freq: 1440, when: 'viewport', check: 'mobile' },
+  { key: 'load_experience', name: 'Loading looks right (preloader, sideways scroll)', freq: 1440, when: 'home', check: 'load_experience:5000' },
+  { key: 'slow_network', name: 'Loads acceptably on slow 4G', freq: 1440, when: 'net_lcp', check: 'slow_network:10000' },
 ];

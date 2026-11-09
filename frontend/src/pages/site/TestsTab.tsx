@@ -16,56 +16,57 @@ type Act = (fn: () => PromiseLike<{ error: { message: string } | null }>) => voi
 const editable = (t: Test) => !t.essential_key && t.steps.every((s) => s.action !== 'check')
 
 const KIND: Record<Test['kind'], string> = {
-  search: 'Căutare', interaction: 'Interacțiune', content: 'Conținut', form: 'Formular',
-  click: 'Navigare', page_load: 'Disponibilitate', health: 'Verificare automată',
+  search: 'Search', interaction: 'Interaction', content: 'Content', form: 'Form',
+  click: 'Navigation', page_load: 'Availability', health: 'Automatic check',
 }
 
-const ROLE_LABEL: Record<string, string> = { navigation: 'meniul', contentinfo: 'subsolul paginii', dialog: 'fereastra' }
+const ROLE_LABEL: Record<string, string> = { navigation: 'the menu', contentinfo: 'the page footer', dialog: 'the dialog' }
 
 function targetLabel(l?: Locator) {
   if (!l) return ''
   if (l.type === 'role' && !l.name && l.role) return ROLE_LABEL[l.role] ?? l.role
-  if (l.type === 'role' && l.role === 'heading') return `titlul „${l.name}”`
-  if (l.type === 'css') return 'secțiunea deschisă'
-  return `„${l.name ?? l.value}”`
+  if (l.type === 'role' && l.role === 'heading') return `the heading “${l.name}”`
+  if (l.type === 'css') return 'the open section'
+  return `“${l.name ?? l.value}”`
 }
 
 function describeStep(s: TestStep) {
   if (s.note) return s.note
   const target = targetLabel(s.locators[0])
   switch (s.action) {
-    case 'goto': return s.value ? `Deschide ${new URL(s.value, 'https://x').pathname}` : 'Deschide pagina'
-    case 'check': return 'Verificare automată'
-    case 'dismiss': return `Închide bannerul de cookie (${target}), dacă apare`
-    case 'click': return `Apasă pe ${target}`
-    case 'fill': return `Scrie „${s.value}” în ${target}`
-    case 'press': return `Apasă tasta ${s.value ?? 'Enter'}`
-    case 'expect_url': return `Verifică că se deschide ${s.value}`
-    case 'expect_visible': return `Verifică că apare ${target}`
-    case 'expect_text': return `Verifică textul „${s.value}”`
-    case 'expect_count': return `Verifică că sunt ${s.value} elemente`
+    case 'goto': return s.value ? `Open ${new URL(s.value, 'https://x').pathname}` : 'Open the page'
+    case 'check': return 'Automatic check'
+    case 'dismiss': return `Close the cookie banner (${target}), if it appears`
+    case 'click': return `Click ${target}`
+    case 'fill': return `Type “${s.value}” into ${target}`
+    case 'press': return `Press the ${s.value ?? 'Enter'} key`
+    case 'expect_url': return `Check that ${s.value} opens`
+    case 'expect_visible': return `Check that ${target} appears`
+    case 'expect_text': return `Check for the text “${s.value}”`
+    case 'expect_count': return `Check that there are ${s.value} elements`
     default: return s.action
   }
 }
 
 function pageLabel(url: string | null | undefined, site: Site) {
-  if (!url || url === site.url) return 'Pagina principală'
+  if (!url || url === site.url) return 'Home page'
   const u = new URL(url)
-  return u.pathname === '/' ? 'Pagina principală' : u.pathname + u.search
+  return u.pathname === '/' ? 'Home page' : u.pathname + u.search
 }
 
 function frequency(min: number) {
-  if (min % 1440 === 0) return min === 1440 ? 'zilnic' : `la ${min / 1440} zile`
-  if (min % 60 === 0) return min === 60 ? 'la fiecare oră' : `la ${min / 60} ore`
-  return `la ${min} min`
+  if (min % 1440 === 0) return min === 1440 ? 'daily' : `every ${min / 1440} days`
+  if (min % 60 === 0) return min === 60 ? 'hourly' : `every ${min / 60} hours`
+  return `every ${min} min`
 }
 
 function ago(iso: string) {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
-  if (min < 1) return 'chiar acum'
-  if (min < 60) return `acum ${min} min`
-  if (min < 1440) return `acum ${Math.round(min / 60)} h`
-  return `acum ${Math.round(min / 1440)} zile`
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min} min ago`
+  if (min < 1440) return `${Math.round(min / 60)} h ago`
+  const days = Math.round(min / 1440)
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`
 }
 
 const isFail = (r?: Run) => r?.status === 'failed' || r?.status === 'error'
@@ -73,11 +74,11 @@ const isBusy = (r?: Run) => r?.status === 'queued' || r?.status === 'running'
 
 function History({ runs }: { runs: Run[] }) {
   const last = runs.slice(0, 10).reverse()
-  if (!last.length) return <span className="muted small">nicio rulare încă</span>
+  if (!last.length) return <span className="muted small">no runs yet</span>
   return (
-    <div className="history" title="Ultimele rulări (cea mai nouă în dreapta)">
+    <div className="history" title="Latest runs (newest on the right)">
       {last.map((r) => (
-        <span key={r.id} className={`hdot ${r.status}`} title={`${new Date(r.created_at).toLocaleString('ro-RO')}`} />
+        <span key={r.id} className={`hdot ${r.status}`} title={`${new Date(r.created_at).toLocaleString('en-GB')}`} />
       ))}
     </div>
   )
@@ -142,28 +143,28 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
         </div>
         <div className="info">
           <h2 style={{ margin: 0 }}>
-            {!active.length ? 'Pregătim monitorizarea' : failing.length
-              ? `${failing.length} ${failing.length === 1 ? 'problemă necesită' : 'probleme necesită'} atenție`
-              : busy && !passing.length ? 'Verificăm site-ul…' : 'Totul funcționează'}
+            {!active.length ? 'Setting up monitoring' : failing.length
+              ? `${failing.length} ${failing.length === 1 ? 'problem needs' : 'problems need'} attention`
+              : busy && !passing.length ? 'Checking the site…' : 'Everything works'}
           </h2>
           <p className="muted" style={{ margin: '0.2rem 0 0' }}>
             {active.length
-              ? <>{passing.length} din {active.length} teste trec{lastCheck && <> · ultima verificare {ago(lastCheck.created_at)}</>}</>
-              : 'Testele automate apar după prima analiză a site-ului.'}
+              ? <>{passing.length} of {active.length} tests passing{lastCheck && <> · last check {ago(lastCheck.created_at)}</>}</>
+              : 'Automatic tests appear after the first scan of the site.'}
           </p>
         </div>
         {active.length > 0 && (
           <motion.button className="btn ghost" disabled={busy} whileTap={{ scale: 0.97 }} onClick={runAll}>
-            {busy ? <><span className="spinner" /> Rulează…</> : <><PlayIcon /> Verifică tot acum</>}
+            {busy ? <><span className="spinner" /> Running…</> : <><PlayIcon /> Check everything now</>}
           </motion.button>
         )}
       </motion.div>
 
       <motion.div variants={fadeUp} className="how">
         {[
-          ['1', 'Verificăm automat', 'La ore fixe, ca un vizitator real.'],
-          ['2', 'Te anunțăm', 'Doar când ceva se strică.'],
-          ['3', 'Îți arătăm ce să repari', 'Cu captură de ecran și pași.'],
+          ['1', 'We check automatically', 'On a schedule, like a real visitor.'],
+          ['2', 'We alert you', 'Only when something breaks.'],
+          ['3', 'We show you what to fix', 'With a screenshot and steps.'],
         ].map(([n, t, d]) => (
           <div key={n} className="how-step"><span className="how-n">{n}</span><div><b>{t}</b><div className="muted small">{d}</div></div></div>
         ))}
@@ -172,7 +173,7 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
       <AnimatePresence>
         {failing.length > 0 && (
           <motion.section initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-            <h2>Necesită atenție</h2>
+            <h2>Needs attention</h2>
             <div className="list">
               {failing.map((t) => <AttentionCard key={t.id} test={t} run={lastDone(t)!} act={act} />)}
             </div>
@@ -184,12 +185,12 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
         <section>
           <div className="section-head">
             <div>
-              <h2>Monitorizare automată</h2>
-              <p className="muted small">Rulează singure. Apasă ⓘ ca să vezi ce verifică fiecare.</p>
+              <h2>Automatic monitoring</h2>
+              <p className="muted small">These run on their own. Click ⓘ to see what each one checks.</p>
             </div>
             <div className="actions">
               <ExportButton site={site} tests={active} />
-              <button className="btn ghost sm" onClick={() => setEditing('new')}>+ Test nou</button>
+              <button className="btn ghost sm" onClick={() => setEditing('new')}>+ New test</button>
             </div>
           </div>
           <motion.div className="tile-grid" variants={stagger}>
@@ -207,17 +208,17 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
 
       <section>
         <motion.div variants={fadeUp} className="card finder">
-          <h2 style={{ margin: 0 }}>Teste pentru o pagină anume</h2>
+          <h2 style={{ margin: 0 }}>Tests for a specific page</h2>
           <p className="muted" style={{ margin: '0.3rem 0 0.8rem' }}>
-            Alege o pagină. O deschidem, încercăm ce se poate folosi pe ea și îți propunem doar testele care merg.
+            Pick a page. We open it, try what can be used on it and only suggest the tests that work.
           </p>
           <div className="finder-kinds">
             {[
-              ['Căutare', 'scrie și caută'],
-              ['Interacțiune', 'meniuri, ferestre, butoane'],
-              ['Conținut', 'titlu, meniu, subsol'],
-              ['Formular', 'completare, fără trimitere'],
-              ['Navigare', 'link-urile importante'],
+              ['Search', 'type and search'],
+              ['Interaction', 'menus, dialogs, buttons'],
+              ['Content', 'heading, menu, footer'],
+              ['Form', 'filling in, no submitting'],
+              ['Navigation', 'the important links'],
             ].map(([k, d]) => <span key={k} className="chip"><b>{k}</b>&nbsp;· {d}</span>)}
           </div>
           <div className="finder-row">
@@ -228,11 +229,11 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
               className="btn" disabled={suggesting} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
               onClick={() => act(() => supabase.rpc('request_suggestions', { sid: site.id, page_url: target === site.url ? null : target }))}
             >
-              {suggesting ? <><span className="spinner" /> Analizăm {pageLabel(site.suggest_url, site)}…</> : 'Găsește teste'}
+              {suggesting ? <><span className="spinner" /> Analyzing {pageLabel(site.suggest_url, site)}…</> : 'Find tests'}
             </motion.button>
           </div>
-          {suggesting && <p className="muted small" style={{ margin: '0.6rem 0 0' }}>Durează între 15 secunde și un minut — încercăm fiecare buton pe bune.</p>}
-          {site.suggest_status === 'error' && <p className="notice error">Nu am putut analiza pagina: {site.suggest_error}</p>}
+          {suggesting && <p className="muted small" style={{ margin: '0.6rem 0 0' }}>Takes between 15 seconds and a minute — we really try every button.</p>}
+          {site.suggest_status === 'error' && <p className="notice error">Couldn't analyze the page: {site.suggest_error}</p>}
         </motion.div>
 
         <AnimatePresence>
@@ -240,8 +241,8 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
             <motion.div key={url} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ marginTop: '1.25rem' }}>
               <div className="section-head">
                 <div>
-                  <h2>Propuneri pentru {pageLabel(url, site)} <span className="count">{list.length}</span></h2>
-                  <p className="muted small">Încearcă-le o dată dacă vrei, apoi alege ce monitorizăm.</p>
+                  <h2>Suggestions for {pageLabel(url, site)} <span className="count">{list.length}</span></h2>
+                  <p className="muted small">Try them once if you like, then choose what we monitor.</p>
                 </div>
               </div>
               <ul className="list"><AnimatePresence>{list.map((t) => <ProposalCard key={t.id} test={t} runs={runsOf(t)} act={act} onEdit={edit(t)} />)}</AnimatePresence></ul>
@@ -249,7 +250,7 @@ export function TestsTab({ site, tests, runs, pages, act }: { site: Site; tests:
           ))}
         </AnimatePresence>
         {site.suggest_status === 'done' && proposed.length === 0 && (
-          <p className="muted" style={{ marginTop: '1rem' }}>Nicio propunere în așteptare. Alege altă pagină ca să găsim mai multe teste.</p>
+          <p className="muted" style={{ marginTop: '1rem' }}>No pending suggestions. Pick another page to find more tests.</p>
         )}
       </section>
     </motion.div>
@@ -265,17 +266,17 @@ function AttentionCard({ test, run, act }: { test: Test; run: Run; act: Act }) {
         <div style={{ minWidth: 0 }}>
           <div className="title">{test.name}</div>
           <div className="muted small">
-            {run.failure_kind ? FAILURE_LABEL[run.failure_kind] ?? run.failure_kind : 'Eroare la rulare'} · {ago(run.created_at)}
+            {run.failure_kind ? FAILURE_LABEL[run.failure_kind] ?? run.failure_kind : 'Run error'} · {ago(run.created_at)}
           </div>
         </div>
         <button className="btn sm" onClick={() => act(() => supabase.from('runs').insert({ test_id: test.id }))}>
-          <PlayIcon /> Verifică din nou
+          <PlayIcon /> Check again
         </button>
       </div>
       {help && (
         <div className="explain">
-          <p><b>Ce verificăm:</b> {help.what}</p>
-          <p><b>Cum repari:</b> {help.fix}</p>
+          <p><b>What we check:</b> {help.what}</p>
+          <p><b>How to fix:</b> {help.fix}</p>
         </div>
       )}
       <FailureDetails run={run} stepLabel={failedStep && describeStep(failedStep)} />
@@ -295,19 +296,19 @@ function TestTile({ test, runs, page, act, onEdit }: { test: Test; runs: Run[]; 
         <span className={`sdot ${state}`} />
         <div className="title" style={{ flex: 1, minWidth: 0 }}>{test.name}</div>
         {onEdit && (
-          <button className="info-btn" onClick={onEdit} aria-label="Editează testul" title="Editează testul">
+          <button className="info-btn" onClick={onEdit} aria-label="Edit test" title="Edit test">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z" /></svg>
           </button>
         )}
-        <button className={`info-btn${info ? ' on' : ''}`} onClick={() => setInfo(!info)} aria-label="Ce verifică testul" title="Ce verifică testul">
+        <button className={`info-btn${info ? ' on' : ''}`} onClick={() => setInfo(!info)} aria-label="What the test checks" title="What the test checks">
           <InfoIcon />
         </button>
       </div>
       <div className="muted small">
         {!test.essential_key && <span className={`kind kind-${test.kind}`}>{KIND[test.kind]}</span>}
         {page && <span className="chip" style={{ marginRight: '0.35rem' }}>{page}</span>}
-        {state === 'running' ? 'Rulează acum…' : done ? `Verificat ${ago(done.created_at)}` : 'Încă nerulat'} · {frequency(test.frequency_minutes)}
-        {test.status === 'paused' && ' · pe pauză'}
+        {state === 'running' ? 'Running now…' : done ? `Checked ${ago(done.created_at)}` : 'Not run yet'} · {frequency(test.frequency_minutes)}
+        {test.status === 'paused' && ' · paused'}
       </div>
       <AnimatePresence initial={false}>
         {info && (
@@ -320,7 +321,7 @@ function TestTile({ test, runs, page, act, onEdit }: { test: Test; runs: Run[]; 
       </AnimatePresence>
       <div className="tile-foot">
         <History runs={runs} />
-        <button className="icon-btn" disabled={state === 'running'} title="Rulează acum"
+        <button className="icon-btn" disabled={state === 'running'} title="Run now"
           onClick={() => act(() => supabase.from('runs').insert({ test_id: test.id }))}>
           <PlayIcon />
         </button>
@@ -338,19 +339,19 @@ function ProposalCard({ test, runs, act, onEdit }: { test: Test; runs: Run[]; ac
           <span className={`kind kind-${test.kind}`}>{KIND[test.kind]}</span>
           <div className="title" style={{ marginTop: '0.35rem' }}>{test.name}</div>
           <div className="muted small">
-            {tried ? (isBusy(tried) ? 'Se încearcă…' : tried.status === 'passed' ? 'Încercat: funcționează ✓' : 'Încercat: nu a mers') : 'Neîncercat încă'}
+            {tried ? (isBusy(tried) ? 'Trying…' : tried.status === 'passed' ? 'Tried: works ✓' : 'Tried: didn\'t work') : 'Not tried yet'}
           </div>
         </div>
         <div className="actions">
           <button className="btn ghost sm" disabled={isBusy(tried)} onClick={() => act(() => supabase.from('runs').insert({ test_id: test.id }))}>
-            Încearcă o dată
+            Try once
           </button>
-          {onEdit && <button className="btn ghost sm" onClick={onEdit}>Editează</button>}
+          {onEdit && <button className="btn ghost sm" onClick={onEdit}>Edit</button>}
           <button className="btn sm" onClick={() => act(() => supabase.from('tests').update({ status: 'approved' }).eq('id', test.id))}>
-            Monitorizează
+            Monitor
           </button>
           <button className="btn ghost sm" onClick={() => act(() => supabase.from('tests').delete().eq('id', test.id))}>
-            Nu e nevoie
+            Not needed
           </button>
         </div>
       </div>

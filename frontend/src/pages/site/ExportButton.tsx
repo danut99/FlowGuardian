@@ -8,8 +8,8 @@ export function ExportButton({ site, tests }: { site: Site; tests: Test[] }) {
   if (!dev || !count) return null
   return (
     <button className="btn ghost sm" onClick={() => downloadPlaywright(site, tests)}
-      title="Descarcă testele ca fișier Playwright (.spec.ts). Verificările automate (SSL, viteză…) nu se exportă.">
-      Exportă Playwright ({count})
+      title="Download the tests as a Playwright file (.spec.ts). Automatic checks (SSL, speed…) are not exported.">
+      Export Playwright ({count})
     </button>
   )
 }

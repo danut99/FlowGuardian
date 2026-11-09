@@ -18,26 +18,26 @@ export function Login() {
       : await supabase.auth.signUp({ email, password })
     setBusy(false)
     if (error) setMessage(error.message)
-    else if (mode === 'signup') setMessage('Verifică emailul pentru confirmarea contului.')
+    else if (mode === 'signup') setMessage('Check your email to confirm your account.')
   }
 
   return (
     <div className="auth">
       <form className="card auth-card" onSubmit={submit}>
         <h1>FlowGuardian</h1>
-        <p className="muted">Descoperă ce nu funcționează pe site-ul tău.</p>
+        <p className="muted">Find out what’s not working on your website.</p>
         <label>
           Email
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label>
-          Parolă
+          Password
           <input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
-        <button className="btn" disabled={busy}>{mode === 'signin' ? 'Intră în cont' : 'Creează cont'}</button>
+        <button className="btn" disabled={busy}>{mode === 'signin' ? 'Sign in' : 'Create account'}</button>
         {message && <p className="notice">{message}</p>}
         <button type="button" className="btn ghost" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
-          {mode === 'signin' ? 'Nu ai cont? Înregistrează-te' : 'Ai deja cont? Intră'}
+          {mode === 'signin' ? 'No account? Sign up' : 'Already have an account? Sign in'}
         </button>
       </form>
     </div>

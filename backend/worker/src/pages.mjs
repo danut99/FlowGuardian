@@ -13,7 +13,7 @@ export async function analyzePage(browser, row) {
   const context = await browser.newContext(DESKTOP);
   try {
     const p = await inspectPage(context, row.url);
-    if (BLOCKED_STATUS.has(p.status)) throw new Error(`Accesul a fost blocat (HTTP ${p.status}).`);
+    if (BLOCKED_STATUS.has(p.status)) throw new Error(`Access was blocked (HTTP ${p.status}).`);
     const { meta, perf } = p;
     const titleLen = meta.title.length;
     const noindex = meta.noindex || /noindex/i.test(p.headers['x-robots-tag'] ?? '');
@@ -21,34 +21,34 @@ export async function analyzePage(browser, row) {
     const https = new URL(p.finalUrl).protocol === 'https:';
 
     const checks = validateChecks([
-      check('availability', 'status', 'Pagina răspunde', p.status && p.status < 400 ? null : 'high', `HTTP ${p.status ?? '—'}`),
+      check('availability', 'status', 'Page responds', p.status && p.status < 400 ? null : 'high', `HTTP ${p.status ?? '—'}`),
 
-      check('performance', 'load', 'Încărcare completă', grade(p.load_ms, 2500, 5000), p.load_ms == null ? 'Nu s-a terminat în 20 s' : sec(p.load_ms)),
-      check('performance', 'ttfb', 'Răspunsul serverului (TTFB)', grade(perf.ttfb, 800, 1800), perf.ttfb == null ? 'Nemăsurat' : `${Math.round(perf.ttfb)} ms`),
-      check('performance', 'lcp', 'Conținutul principal apare (LCP)', grade(perf.lcp, 2500, 4000), perf.lcp == null ? 'Nemăsurat' : `${sec(perf.lcp)} (bun: sub 2,5 s)`),
-      check('performance', 'cls', 'Stabilitate vizuală (CLS)', grade(perf.cls, 0.1, 0.25), perf.cls == null ? 'Nemăsurat' : `${perf.cls.toFixed(2)} (bun: sub 0,1)`),
-      check('performance', 'weight', 'Dimensiunea paginii', grade(perf.bytes, 2_000_000, 5_000_000), `${(perf.bytes / 1e6).toFixed(1)} MB · ${perf.requests} cereri`),
+      check('performance', 'load', 'Full page load', grade(p.load_ms, 2500, 5000), p.load_ms == null ? 'Did not finish within 20 s' : sec(p.load_ms)),
+      check('performance', 'ttfb', 'Server response time (TTFB)', grade(perf.ttfb, 800, 1800), perf.ttfb == null ? 'Not measured' : `${Math.round(perf.ttfb)} ms`),
+      check('performance', 'lcp', 'Main content appears (LCP)', grade(perf.lcp, 2500, 4000), perf.lcp == null ? 'Not measured' : `${sec(perf.lcp)} (good: under 2.5 s)`),
+      check('performance', 'cls', 'Visual stability (CLS)', grade(perf.cls, 0.1, 0.25), perf.cls == null ? 'Not measured' : `${perf.cls.toFixed(2)} (good: under 0.1)`),
+      check('performance', 'weight', 'Page size', grade(perf.bytes, 2_000_000, 5_000_000), `${(perf.bytes / 1e6).toFixed(1)} MB · ${perf.requests} requests`),
 
-      check('content', 'links', 'Link-uri funcționale', brokenLinks.length ? 'medium' : null,
-        brokenLinks.length ? `${brokenLinks.length} link-uri stricate: ${brokenLinks.slice(0, 2).map((l) => l.url).join(', ')}` : 'Niciun link stricat'),
-      check('content', 'images', 'Imagini care se încarcă', p.broken_images.length ? 'low' : null,
-        p.broken_images.length ? `${p.broken_images.length} imagini lipsă: ${p.broken_images[0].url}` : 'Toate se încarcă'),
-      check('content', 'js', 'Fără erori JavaScript', p.js_errors.length ? 'low' : null,
-        p.js_errors.length ? `${p.js_errors.length} erori: ${p.js_errors[0].slice(0, 160)}` : 'Consola e curată'),
+      check('content', 'links', 'Working links', brokenLinks.length ? 'medium' : null,
+        brokenLinks.length ? `${brokenLinks.length} broken ${brokenLinks.length === 1 ? 'link' : 'links'}: ${brokenLinks.slice(0, 2).map((l) => l.url).join(', ')}` : 'No broken links'),
+      check('content', 'images', 'Images load', p.broken_images.length ? 'low' : null,
+        p.broken_images.length ? `${p.broken_images.length} missing ${p.broken_images.length === 1 ? 'image' : 'images'}: ${p.broken_images[0].url}` : 'All images load'),
+      check('content', 'js', 'No JavaScript errors', p.js_errors.length ? 'low' : null,
+        p.js_errors.length ? `${p.js_errors.length} ${p.js_errors.length === 1 ? 'error' : 'errors'}: ${p.js_errors[0].slice(0, 160)}` : 'The console is clean'),
 
-      check('seo', 'title', 'Titlu de pagină', !titleLen ? 'medium' : titleLen < 10 || titleLen > 65 ? 'low' : null,
-        !titleLen ? 'Lipsește <title>' : titleLen > 65 ? `Prea lung (${titleLen} caractere)` : titleLen < 10 ? 'Prea scurt' : meta.title),
-      check('seo', 'description', 'Descriere pentru Google', meta.description ? null : 'low', meta.description || 'Lipsește meta description'),
-      check('seo', 'h1', 'Titlu principal (H1)', meta.h1 ? null : 'low', meta.h1 ? `${meta.h1} titluri H1` : 'Niciun H1'),
-      check('seo', 'canonical', 'Adresă canonică', meta.canonical ? null : 'low', meta.canonical ?? 'Lipsește <link rel="canonical">'),
+      check('seo', 'title', 'Page title', !titleLen ? 'medium' : titleLen < 10 || titleLen > 65 ? 'low' : null,
+        !titleLen ? '<title> is missing' : titleLen > 65 ? `Too long (${titleLen} characters)` : titleLen < 10 ? 'Too short' : meta.title),
+      check('seo', 'description', 'Description for Google', meta.description ? null : 'low', meta.description || 'Meta description is missing'),
+      check('seo', 'h1', 'Main heading (H1)', meta.h1 ? null : 'low', meta.h1 ? `${meta.h1} H1 ${meta.h1 === 1 ? 'heading' : 'headings'}` : 'No H1'),
+      check('seo', 'canonical', 'Canonical URL', meta.canonical ? null : 'low', meta.canonical ?? '<link rel="canonical"> is missing'),
       // On inner pages noindex is often deliberate (cart, account), so it's only a warning
-      check('seo', 'index', 'Pagina poate apărea în Google', noindex ? 'low' : null, noindex ? 'Are noindex — e intenționat?' : 'Indexarea e permisă'),
-      check('seo', 'alt', 'Text alternativ la imagini', meta.imgs_no_alt ? 'low' : null,
-        meta.imgs_no_alt ? `${meta.imgs_no_alt} din ${meta.imgs} imagini fără alt` : `${meta.imgs} imagini verificate`),
-      check('seo', 'og', 'Previzualizare la distribuire', meta.og ? null : 'low', meta.og ? 'Are og:title și og:image' : 'Lipsesc og:title / og:image'),
+      check('seo', 'index', 'Page can appear in Google', noindex ? 'low' : null, noindex ? 'Has noindex — is that intentional?' : 'Indexing is allowed'),
+      check('seo', 'alt', 'Alt text on images', meta.imgs_no_alt ? 'low' : null,
+        meta.imgs_no_alt ? `${meta.imgs_no_alt} of ${meta.imgs} images without alt` : `${meta.imgs} ${meta.imgs === 1 ? 'image' : 'images'} checked`),
+      check('seo', 'og', 'Share preview', meta.og ? null : 'low', meta.og ? 'Has og:title and og:image' : 'og:title / og:image are missing'),
 
-      check('security', 'mixed', 'Fără conținut nesecurizat', https && p.insecure.length ? 'low' : null,
-        https && p.insecure.length ? `${p.insecure.length} resurse prin http://` : 'OK'),
+      check('security', 'mixed', 'No insecure content', https && p.insecure.length ? 'low' : null,
+        https && p.insecure.length ? `${p.insecure.length} ${p.insecure.length === 1 ? 'resource' : 'resources'} over http://` : 'OK'),
     ]);
 
     return {
@@ -81,7 +81,7 @@ async function snapshot(page, url) {
 async function verdict(browser, options, url, spec) {
   return withPage(browser, options, (page) => runCheck(page, new URL(url), spec))
     .then((r) => (r ? { ok: false, message: r.message, shot: r.screenshot } : { ok: true }))
-    .catch((e) => ({ ok: null, message: `Nu am putut verifica: ${e.message.split('\n')[0]}` }));
+    .catch((e) => ({ ok: null, message: `Could not check: ${e.message.split('\n')[0]}` }));
 }
 
 export async function deepAnalyze(browser, url) {

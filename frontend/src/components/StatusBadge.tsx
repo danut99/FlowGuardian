@@ -1,14 +1,14 @@
 import type { RunStatus, TestStatus } from '../types'
 
 const LABELS: Record<RunStatus | TestStatus, string> = {
-  queued: 'În coadă',
-  running: 'Rulează',
+  queued: 'Queued',
+  running: 'Running',
   passed: 'OK',
-  failed: 'Eșuat',
-  error: 'Eroare',
-  proposed: 'Propus',
-  approved: 'Aprobat',
-  paused: 'Pe pauză',
+  failed: 'Failed',
+  error: 'Error',
+  proposed: 'Proposed',
+  approved: 'Approved',
+  paused: 'Paused',
 }
 
 export function StatusBadge({ status }: { status: RunStatus | TestStatus }) {
