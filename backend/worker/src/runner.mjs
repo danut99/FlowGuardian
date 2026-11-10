@@ -1,3 +1,5 @@
+import { assertPublic } from './api.mjs';
+import { approvedOrigins } from './flow-origins.mjs';
 import { resolve, findSimilar, toLocator } from './locators.mjs';
 import { runCheck } from './health.mjs';
 
@@ -31,14 +33,12 @@ async function target(page, step) {
   throw new StepFailure('selector_changed', step.position, 'The saved element was not found. Review the test and page state before treating this as a site issue.');
 }
 
-async function runStep(page, step, site) {
+async function runStep(page, step, site, origins) {
   const timeout = stepTimeout(step);
   switch (step.action) {
     case 'goto': {
       const url = new URL(step.value || site.href, site);
-      if (url.host !== site.host) {
-        throw new StepFailure(null, step.position, `URL outside the monitored site: ${url.host}`);
-      }
+      if (!origins.has(url.origin)) await assertPublic(url);
       const res = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout });
       const status = res?.status() ?? 0;
       if (status === 403 || status === 429) {
@@ -71,7 +71,7 @@ async function runStep(page, step, site) {
     }
     case 'click':
     case 'fill': {
-      if (step.credential && new URL(page.url()).origin !== site.origin) {
+      if (step.credential && !origins.has(new URL(page.url()).origin)) {
         throw new StepFailure(null, step.position, 'Test-account fields can only be filled on the configured site origin.');
       }
       const { locator, index } = await target(page, step);
@@ -127,6 +127,7 @@ async function runStep(page, step, site) {
 }
 
 export async function runSteps(page, steps, siteUrl, { strict = false } = {}) {
+  const origins = approvedOrigins(steps, siteUrl);
   if (strict) steps = steps.map((s) => ({ ...s, strict: true, locators: (s.locators ?? []).slice(0, 1).map((l) => ({ ...l, exact: true, strict: true })) }));
   const site = new URL(siteUrl);
   let drift = null;
@@ -136,7 +137,7 @@ export async function runSteps(page, steps, siteUrl, { strict = false } = {}) {
     const entry = { position: step.position, action: step.action, target: step.locators?.[0]?.name ?? step.locators?.[0]?.value ?? '', value: step.action === 'fill' ? '[redacted]' : step.value, status: 'passed', url: (page.url?.() ?? siteUrl), duration_ms: 0 };
     try {
       page.setDefaultTimeout?.(stepTimeout(step));
-      drift = (await runStep(page, step, site)) ?? drift;
+      drift = (await runStep(page, step, site, origins)) ?? drift;
       entry.url = (page.url?.() ?? siteUrl);
       entry.duration_ms = Date.now() - started;
       trace.push(entry);

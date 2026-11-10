@@ -15,7 +15,7 @@ export function distinctFlows(candidates, limit = 3) {
   }).slice(0, limit);
 }
 
-export function suggestFlows(url, { links = [], forms = [], observations = [] } = {}) {
+export function suggestFlows(url, { links = [], forms = [], observations = [], limit = 3 } = {}) {
   const origin = new URL(url).origin;
   const own = links.filter((l) => { try { return new URL(l.href, url).origin === origin && !/logout|signout|delete|unsubscribe/i.test(l.href); } catch { return false; } });
   const definitions = [
@@ -27,8 +27,8 @@ export function suggestFlows(url, { links = [], forms = [], observations = [] } 
     ['navigation', 'Explore services or pricing', /pricing|about|plans|services/i, 'navigation', ['Follow the service or pricing link', 'Inspect the destination content', 'Define the specific content or next action to monitor'], 'Choose a specific expected heading or content. A reachable page alone does not verify a customer journey.'],
   ];
   const candidates = definitions.flatMap(([kind, name, re, control, plan, expected]) => {
-    const observed = observations.find((o) => o.controls?.[control] || kind === 'access' && o.controls?.access_entry);
-    const actualControl = observed?.controls?.[control] ? control : kind === 'access' && observed?.controls?.access_entry ? 'access_entry' : control;
+    const observed = observations.find((o) => o.controls?.[control] || kind === 'access' && (o.controls?.access_entry || o.controls?.account_email));
+    const actualControl = observed?.controls?.[control] ? control : kind === 'access' && observed?.controls?.access_entry ? 'access_entry' : kind === 'access' && observed?.controls?.account_email ? 'account_email' : control;
     const observedControl = observed?.controls?.[actualControl];
     const link = (kind === 'purchase' ? own.find((l) => /\/products?\//i.test(new URL(l.href, url).pathname)) : null) ?? own.find((l) => re.test(new URL(l.href, url).pathname + ' ' + l.text));
     if (!observed && !link && !(kind === 'request' && forms.some((f) => f.contact))) return [];
@@ -38,11 +38,11 @@ export function suggestFlows(url, { links = [], forms = [], observations = [] } 
       evidence: observed ? observedControl.evidence : link ? `Found link: ${link.text || new URL(link.href, url).pathname}` : 'Found a contact-form signal',
       expected, state: 'possible', control_kind: actualControl, suggested_steps: actualControl === 'access_entry' ? ['Locate the observed sign-in button', 'Open the sign-in dialog or account screen', 'Check the expected account inputs'] : plan,
       discovery_strength: observed ? 'control_observed' : 'link_only',
-      observed_controls: observedControl ?? null }];
+      destination_origin: observed?.destination_origin, observed_controls: observedControl ?? null }];
   });
   // Prefer observed controls over keyword matches; semantic types and target pages must be distinct.
   candidates.sort((a,b) => Number(b.discovery_strength === 'control_observed') - Number(a.discovery_strength === 'control_observed'));
-  return distinctFlows(candidates);
+  return distinctFlows(candidates, limit);
 }
 
 async function inspectSignals(page) {
@@ -67,6 +67,7 @@ async function inspectSignals(page) {
     if (accessEntry && !password) controls.access_entry = { evidence: `Observed visible account-entry button: "${buttonName(accessEntry)}". The account form was not opened.`, fields: [], buttons: [buttonName(accessEntry)], stage: 'entry_button_only' };
     if (appEntry) controls.app_entry = { evidence: `Observed visible application-entry button: "${buttonName(appEntry)}". The next screen was not opened.`, fields: [], buttons: [buttonName(appEntry)], stage: 'entry_button_only' };
     if(search) controls.search = { evidence: 'Observed a visible search input', fields: [describe(search)] };
+    if (!password && /login|authentication|account/i.test(location.pathname) && inputs.some(el=>el.type==='email')) controls.account_email = {evidence:'Observed account email form on the sign-in destination. Authentication was not submitted.',fields:inputs.filter(el=>el.type==='email').map(describe)};
     if(password) controls.access = { evidence: 'Observed a visible password field and account inputs', fields: inputs.filter(el=>el.type==='email'||el.type==='password'||/user|login/i.test(el.name)).map(describe) };
     if(contact) controls.contact = { evidence: 'Observed a contact form with email and message fields', fields: [...contact.querySelectorAll('input:not([type=hidden]),textarea,select')].filter(visible).map(describe) };
     if(product) controls.product = { evidence: optionButtons.length ? `Observed ${optionButtons.length} visible product-option buttons${productButtons.length ? ' and purchase controls' : ''}. Selection, cart and checkout were not tested.` : 'Observed product options or purchase controls. Selection, cart and checkout were not tested.', fields: variantFields.map(describe), buttons: [...new Set([...optionButtons, ...productButtons].map(buttonName).filter(Boolean))].slice(0, 20), stage: 'product_controls_observed' };
@@ -118,7 +119,7 @@ export async function probeEntryButton(browser, url, label, { validateUrl = asse
   } finally { await context.close(); }
 }
 
-export async function discoverFlows(browser, url, { validateUrl = assertPublic } = {}) {
+export async function discoverFlows(browser, url, { validateUrl = assertPublic, limit = 3 } = {}) {
   await validateUrl(new URL(url));
   const context = await browser.newContext();
   try {
@@ -143,12 +144,14 @@ export async function discoverFlows(browser, url, { validateUrl = assertPublic }
     for(const target of targets) {
       try {
         const response=await page.goto(target.href,{waitUntil:'domcontentloaded',timeout:12000});
-        if(!response || response.status()>=400 || new URL(page.url()).origin!==origin)continue;
+        if(!response || response.status()>=400)continue;
         await page.waitForTimeout(500);
-        observations.push(await inspectSignals(page));
+        const observation = await inspectSignals(page);
+        if (new URL(observation.url).origin !== origin) { observation.destination_origin = new URL(observation.url).origin; observation.url = target.href; }
+        observations.push(observation);
       } catch { /* Unreadable pages do not establish functional controls. */ }
     }
-    const candidates = suggestFlows(signals.url, { ...signals, observations });
+    const candidates = suggestFlows(signals.url, { ...signals, observations, limit });
     for (const candidate of candidates) {
       if (!['access_entry', 'app_entry'].includes(candidate.control_kind)) continue;
       const label = candidate.observed_controls?.buttons?.[0];

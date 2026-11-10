@@ -27,6 +27,7 @@ export function FlowsTab({ site, tests, runs, pages, reload }: { site: Site; tes
 
   function configure(candidate?: FlowCandidate) {
     setEditing(null)
+    if (!candidate) { setDraft({ name: '', steps: [] }); return }
     const steps: TestDraft['steps'] = [{ action: 'goto', locators: [], value: candidate?.target_url ?? site.url, note: 'Open the discovered interaction page' }]
     if (candidate?.entry_action) steps.push({ action: 'click', locators: [{ type: 'role', role: candidate.entry_action.role, name: candidate.entry_action.name }], value: null, note: 'Open the observed entry screen' })
     for (const field of candidate?.observed_controls?.fields ?? []) {
@@ -117,7 +118,7 @@ export function FlowsTab({ site, tests, runs, pages, reload }: { site: Site; tes
       })}
     </section>
     </>}
-    <section><div className="section-head"><h3>Checked during discovery</h3><button className="btn ghost sm" disabled={['pending', 'scanning'].includes(site.scan_status) || busy} onClick={() => update(() => supabase.from('sites').update({ scan_status: 'pending', scan_error: null }).eq('id', site.id))}>{discovering ? 'Discovering...' : 'Discover again'}</button></div>
+    <section><div className="section-head"><h3>Checked during discovery</h3><button className="btn ghost sm" disabled={['pending', 'scanning'].includes(site.scan_status) || busy} onClick={() => update(() => supabase.rpc('request_scan', { sid: site.id }))}>{discovering ? 'Discovering...' : 'Discover again'}</button></div>
       <p className="muted small">The same recorded paths shown in the public report. Open a card to see exactly what ran. Monitoring requires site ownership and your explicit activation.</p>
       {site.scan_status === 'error' && <p className="notice error">Discovery did not finish: {site.scan_error}</p>}
       <PublicFlowsReport embedded title={site.name ?? site.url} candidates={site.overview?.flow_candidates ?? []} pending={discovering} onConfigure={configure} onMonitor={monitorDiscovered} canMonitor={c => !!site.verified_at && canMonitorDiscovered(c, site.url)} busy={busy} />

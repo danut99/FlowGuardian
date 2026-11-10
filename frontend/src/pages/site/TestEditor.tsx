@@ -1,5 +1,4 @@
 import { readStepTimeout, writeStepNote } from '../../lib/stepTimeout'
-import { draftFromDescription } from '../../lib/flowDescription'
 import { StepSelectorEditor } from './StepSelectorEditor'
 import { FlowSchema } from '../../components/FlowSchema'
 import { flowGoal } from '../../lib/customerFlows'
@@ -62,7 +61,7 @@ function validate(name: string, steps: Draft[], site: Site): string | null {
     if (a.value === 'required' && !s.value.trim()) return `${n}: fill in “${a.valueLabel}”.`
     if (s.action === 'goto' && s.value.trim()) {
       try {
-        if (new URL(s.value, site.url).host !== new URL(site.url).host) return `${n}: we can only open pages on ${new URL(site.url).host}.`
+        if (!['https:', 'http:'].includes(new URL(s.value, site.url).protocol)) return `${n}: enter an HTTP or HTTPS address.`
       } catch { return `${n}: the address isn't valid.` }
     }
   }
@@ -123,22 +122,24 @@ export function TestEditor({ site, test, draft, pages, onClose, onSaved, flowMod
     } catch { setDescriptionNotice('Could not request an AI draft. Try again.') }
     finally { setAiSending(false) }
   }
-  function generateDescription() {
-    const quoted = [...goal.matchAll(/["?]([^"?]+)["?]/g)].at(-1)?.[1] ?? ''
-    const result = draftFromDescription(goal, site.overview?.flow_candidates ?? [], expectedText.trim() || quoted, searchQuery)
-    if (!result.steps) { setDescriptionNotice(result.question || 'Add the missing details or try AI.'); return }
-    if ((test || generatedPreview) && !window.confirm('Replace the current draft with steps from detected controls?')) return
-    setSteps(result.steps.map(s => draftOf(s.action as Action, s.locators, s.value ?? '', s.note ?? null)))
-    setName(name || goal.trim().slice(0,70)); setAuthorized(false); setGeneratedPreview(true); setPreviewStep(0); setEditorTab('suggested')
-    setDescriptionNotice('Prepared from Playwright discovery observations, without AI. Review and verify before monitoring. Submit controls and expected results still need execution verification.')
+  async function generateDescription() {
+    if (!goal.trim()) { setDescriptionNotice('Describe the journey first.'); return }
+    if ((test || generatedPreview) && !window.confirm('Replace the draft with freshly detected steps?')) return
+    setAiSending(true); setDescriptionNotice('Inspecting the website in a fresh browser session, without AI...')
+    try {
+      const {data,error} = await supabase.rpc('ask_ai', {sid:site.id,purl:null,msg:'[FLOW_DISCOVER]'+JSON.stringify({prompt:goal,expected:expectedText,query:searchQuery})})
+      if (error) setDescriptionNotice(error.message); else setAiRequest(data)
+    } catch {setDescriptionNotice('Could not start browser discovery.')}
+    finally {setAiSending(false)}
   }
   const [freq, setFreq] = useState(test?.frequency_minutes ?? 1440)
   const [steps, setSteps] = useState<Draft[]>(() => (test ?? draft)
     ? (test ?? draft)!.steps.map((s) => draftOf(s.action as Action, s.locators, s.value ?? '', s.note ?? null))
-    : [draftOf('goto')])
+    : flowMode ? [] : [draftOf('goto')])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [authorized, setAuthorized] = useState(false)
+  const [additionalOrigins] = useState(() => (test ?? draft)?.steps.find(s => s.action === 'goto')?.locators.find(l => l.type === 'flow_config')?.allowed_origins?.join('\n') ?? '')
   const account = useTestAccount(flowMode ? test?.id : undefined)
   const paths = [...new Set(pages.map((p) => { const u = new URL(p.url); return u.pathname + u.search }))]
 
@@ -151,6 +152,11 @@ export function TestEditor({ site, test, draft, pages, onClose, onSaved, flowMod
   const add = (action: Action) => setSteps((s) => [...s, draftOf(action, info(action).target ? [emptyLocator(action)] : [])])
 
   async function save(run: boolean) {
+    let origins: string[]
+    try {
+      origins = [...new Set(additionalOrigins.split(/[\n,]+/).map(s => s.trim()).filter(Boolean))]
+      if (origins.length > 5 || origins.some(value => { const u = new URL(value); return u.protocol !== 'https:' || u.origin !== value || !!u.username || !!u.password })) throw new Error()
+    } catch { return setError('Enter up to five exact HTTPS origins, such as https://account.example.com, without paths.') }
     const problem = validate(name, steps, site)
     if (problem) return setError(problem)
     if (flowMode && (!steps.at(-1)?.action.startsWith('expect_') || !steps.some((s) => ['goto', 'click', 'fill', 'press'].includes(s.action)))) return setError('A flow needs a navigation or interaction step and a final expected-result check.')
@@ -167,7 +173,7 @@ export function TestEditor({ site, test, draft, pages, onClose, onSaved, flowMod
       // test_steps.note is limited to 160 characters. Keep the revision prefix intact.
       const revisionPrefix = 'Flow v1|' + new Date().toISOString() + '|'
       const revisionNote = writeStepNote(goal.trim(), steps[0]?.timeout ?? 30000, revisionPrefix)
-      const flowSteps = steps.map((s, i) => ({ action: s.action, locators: s.locators.slice(0, 1).map((l) => ({ ...l, exact: true, strict: true })), value: s.value.trim() || null, note: i === 0 ? revisionNote : writeStepNote(s.note, s.timeout) }))
+      const flowSteps = steps.map((s, i) => ({ action: s.action, locators: s.action === 'goto' ? [{type:'flow_config',allowed_origins:origins}] : s.locators.slice(0, 1).map((l) => ({ ...l, exact: true, strict: true })), value: s.value.trim() || null, note: i === 0 ? revisionNote : writeStepNote(s.note, s.timeout) }))
       let flowId: string
       if (test) {
         const { error: pauseError } = await supabase.from('tests').update({ enabled: false, status: 'paused' }).eq('id', test.id)
@@ -228,7 +234,7 @@ export function TestEditor({ site, test, draft, pages, onClose, onSaved, flowMod
         {flowMode && <details className="flow-account-options"><summary>Test account (only for journeys that sign in)</summary><TestAccount account={account} /></details>}
         {flowMode && <div className="flow-editor-tabs" role="tablist" aria-label="Flow building method">{(['manual', 'suggested'] as const).map(tab => <button type="button" key={tab} role="tab" id={`${editorTabsId}-${tab}-tab`} aria-controls={`${editorTabsId}-${tab}-panel`} aria-selected={editorTab === tab} tabIndex={editorTab === tab ? 0 : -1} onClick={() => setEditorTab(tab)} onKeyDown={e => { if (['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) { e.preventDefault(); const next = e.key === 'Home' ? 'manual' : e.key === 'End' ? 'suggested' : tab === 'manual' ? 'suggested' : 'manual'; setEditorTab(next); document.getElementById(`${editorTabsId}-${next}-tab`)?.focus() } }}>{tab === 'manual' ? 'Build manually' : 'Suggested flow'}</button>)}</div>}
         <div hidden={flowMode && editorTab !== 'suggested'} role={flowMode ? 'tabpanel' : undefined} id={`${editorTabsId}-suggested-panel`} aria-labelledby={flowMode ? `${editorTabsId}-suggested-tab` : undefined}>
-        {flowMode && <section className="flow-description-builder"><h3>Describe what should work</h3><label>Your journey<textarea rows={3} maxLength={1000} value={goal} onChange={e => setGoal(e.target.value)} placeholder='For example: open Contact and check that the email and message fields are visible. Or search for a product and check its result.' /></label><p className="muted small">We first use controls recorded during Playwright discovery, without AI. If these cannot describe your journey, you can choose AI assistance. AI sends your description and detected controls to our provider. Never include passwords.</p><label>Expected visible text (optional for checks of detected controls)<input value={expectedText} onChange={e => setExpectedText(e.target.value)} placeholder="For example: Search results or Message sent" /></label>{/search|caut|c?ut/i.test(goal) && <label>Search term<input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="For example: thailand" /></label>}<button type="button" className="btn" disabled={aiSending || !!aiRequest} onClick={generateDescription}>{"Prepare from detected controls"}</button>{descriptionNotice && <><p role="status" className="notice">{descriptionNotice}</p><button type="button" className="btn ghost sm" disabled={aiSending || !!aiRequest} onClick={generateAiDescription}>{aiSending || aiRequest ? "Preparing AI draft..." : "Use AI for this description"}</button></>}{steps.length > 0 && <FlowSchema steps={steps.map(s => ({ label: info(s.action).label, action: info(s.action).label, detail: s.action === 'fill' && s.value.startsWith('{{test.') ? 'Use the saved test account' : s.locators[0]?.name || s.locators[0]?.value || s.value, status: 'unknown' }))} selected={previewStep} onSelect={setPreviewStep} />}
+        {flowMode && <section className="flow-description-builder"><h3>Describe what should work</h3><label>Your journey<textarea rows={3} maxLength={1000} value={goal} onChange={e => setGoal(e.target.value)} placeholder='For example: open Contact and check that the email and message fields are visible. Or search for a product and check its result.' /></label><p className="muted small">We inspect public pages in a fresh browser session first, without AI. If these cannot describe your journey, you can choose AI assistance. AI sends your description and detected controls to our provider. Never include passwords.</p><label>Expected visible text (optional for checks of detected controls)<input value={expectedText} onChange={e => setExpectedText(e.target.value)} placeholder="For example: Search results or Message sent" /></label>{/search|(?:caut|c?ut)[^.!?]{0,30}(?:produs|product|query|termen)/i.test(goal) && <label>Search term<input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="For example: thailand" /></label>}<button type="button" className="btn" disabled={aiSending || !!aiRequest} onClick={generateDescription}>{"Prepare from detected controls"}</button>{descriptionNotice && <><p role="status" className="notice">{descriptionNotice}</p><button type="button" className="btn ghost sm" disabled={aiSending || !!aiRequest} onClick={generateAiDescription}>{aiSending || aiRequest ? "Preparing AI draft..." : "Use AI for this description"}</button></>}{steps.length > 0 && <FlowSchema steps={steps.map(s => ({ label: info(s.action).label, action: info(s.action).label, detail: s.action === 'fill' && s.value.startsWith('{{test.') ? 'Use the saved test account' : s.locators[0]?.name || s.locators[0]?.value || s.value, status: 'unknown' }))} selected={previewStep} onSelect={setPreviewStep} />}
           <div className="suggested-draft-steps"><h3>{test ? 'Saved steps / current draft' : 'Current draft steps'}</h3><p className="muted small">These are the steps currently in the editor. Generating again replaces them only after confirmation.</p><ol>{steps.map((s, i) => <li key={s.key}><div className="section-head"><div><b>{i + 1}. {info(s.action).label}</b><p className="muted small">{s.locators[0]?.name || s.locators[0]?.value || (s.action === 'fill' ? 'Test input' : s.value)}</p></div><button type="button" className="btn ghost sm" onClick={() => { setPreviewStep(i); setEditorTab('manual'); window.setTimeout(() => document.getElementById(`${editorTabsId}-step-${s.key}`)?.scrollIntoView({block:'center',behavior:'smooth'}), 0) }}>Edit step</button></div><label>Wait up to (seconds)<input type="number" min={1} max={60} value={s.timeout / 1000} onChange={e => { update(s.key, {timeout: Math.max(1, Math.min(60, Number(e.target.value) || 1)) * 1000}); setAuthorized(false) }} /><span className="muted small">Continue as soon as this step succeeds.</span></label>{info(s.action).target && <StepSelectorEditor site={site} pageUrl={steps.slice(0, i + 1).findLast(step => step.action === 'goto')?.value || site.url} action={s.action} current={s.locators[0]} onApply={locator => { update(s.key, {locators:[locator]}); setAuthorized(false) }} />}</li>)}</ol></div>
           <button type="button" className="btn ghost sm" onClick={() => setEditorTab('manual')}>Edit these steps manually</button></section>}
         </div>
@@ -243,6 +249,7 @@ export function TestEditor({ site, test, draft, pages, onClose, onSaved, flowMod
 
         <div hidden={flowMode && editorTab !== 'manual'} role={flowMode ? 'tabpanel' : undefined} id={`${editorTabsId}-manual-panel`} aria-labelledby={flowMode ? `${editorTabsId}-manual-tab` : undefined}>
         {flowMode && <p className="muted small">Build each browser action and expected result. Target elements by role and accessible name, visible text, field label, placeholder, test ID, or CSS: #element-id, .class-name, [name="email"]. Switching tabs keeps this same draft.</p>}
+        {flowMode && !steps.length && <p className="notice">No steps yet. Add your first action below, or describe the journey in Suggested flow.</p>}
         <ol className="editor-steps">
           <AnimatePresence initial={false}>
             {steps.map((s, i) => (

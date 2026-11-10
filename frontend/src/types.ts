@@ -53,7 +53,7 @@ export type NetworkResult = {
   error?: boolean
 }
 
-export type FlowCandidate = { kind: string; name: string; entry_url: string; target_url: string; target_name?: string; entry_action?: { role: string; name: string }; evidence: string; expected: string; state: 'possible'; control_kind?: string; suggested_steps?: string[]; discovery_strength?: 'control_observed' | 'link_only'; observed_controls?: { evidence: string; fields: { tag: string; type: string; name: string; label: string; required: boolean }[]; buttons?: string[] } | null; public_run?: { scope: string; limitation: string; steps: { action: string; target_label?: string; requested_url: string; url: string; title?: string; http_status?: number | null; duration_ms: number; observed_at: string; screenshot?: string; result: string; detail?: string; fields?: { tag: string; type: string; name: string; label: string; required: boolean }[]; buttons?: string[]; error?: string }[] } }
+export type FlowCandidate = { destination_origin?: string; kind: string; name: string; entry_url: string; target_url: string; target_name?: string; entry_action?: { role: string; name: string }; evidence: string; expected: string; state: 'possible'; control_kind?: string; suggested_steps?: string[]; discovery_strength?: 'control_observed' | 'link_only'; observed_controls?: { evidence: string; fields: { tag: string; type: string; name: string; label: string; required: boolean }[]; buttons?: string[] } | null; public_run?: { scope: string; limitation: string; steps: { action: string; target_label?: string; requested_url: string; url: string; title?: string; http_status?: number | null; duration_ms: number; observed_at: string; screenshot?: string; result: string; detail?: string; fields?: { tag: string; type: string; name: string; label: string; required: boolean }[]; buttons?: string[]; error?: string }[] } }
 
 export type Overview = {
   flow_candidates?: FlowCandidate[]
@@ -144,7 +144,7 @@ export type PageCheck = {
 export type TestKind = 'page_load' | 'click' | 'form' | 'health' | 'search' | 'interaction' | 'content'
 export type TestStatus = 'proposed' | 'approved' | 'paused'
 
-export type Locator = { type: string; role?: string; name?: string; value?: string }
+export type Locator = { allowed_origins?: string[]; type: string; role?: string; name?: string; value?: string }
 
 export type TestStep = {
   position: number

@@ -46,7 +46,7 @@ export function SiteDetail() {
       supabase.from('page_checks').select(PAGE_COLUMNS).eq('site_id', id).order('checked_at'),
     ])
     const firstError = siteRes.error ?? testsRes.error ?? runsRes.error ?? pagesRes.error
-    if (firstError) setError(firstError.message)
+    setError(firstError?.message ?? null)
     setSite(siteRes.data)
     setTests(testsRes.data ?? [])
     // Fetch the latest pass per current flow revision, even outside the 30 recent runs.
@@ -102,6 +102,7 @@ export function SiteDetail() {
   }, [id, scanStatus])
 
   async function act(fn: () => PromiseLike<{ error: { message: string } | null }>) {
+    setError(null)
     const { error } = await fn()
     if (error) setError(error.message)
     else load()
@@ -140,7 +141,7 @@ export function SiteDetail() {
           </div>
         </div>
         {!scanning && visibleTab === 'overview' && (
-          <button className="btn ghost sm" onClick={() => act(() => supabase.from('sites').update({ overview: { ...site.overview, audit_requested: true }, scan_status: 'pending', scan_error: null }).eq('id', site.id))}>
+          <button className="btn ghost sm" onClick={() => act(() => supabase.rpc('request_website_audit', { sid: site.id }))}>
             Run website audit
           </button>
         )}
@@ -164,7 +165,7 @@ export function SiteDetail() {
       <AnimatePresence mode="wait">
         <motion.div key={visibleTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
           {visibleTab === 'flows' && <FlowsTab site={site} tests={tests} runs={runs} pages={pages} reload={load} />}
-          {visibleTab === 'overview' && (!o || o.discovery_only) && !scanning ? <div className="card"><h2>Website audit</h2><p className="muted">Run a separate audit of speed, SEO, links, security and privacy when you need it. Adding a site only discovers possible customer flows.</p><button className="btn" onClick={() => act(() => supabase.from('sites').update({ overview: { ...site.overview, audit_requested: true }, scan_status: 'pending', scan_error: null }).eq('id', site.id))}>Run website audit</button></div> : visibleTab === 'overview' && <OverviewTab site={site} pages={pages} onDeep={(pid: string) => act(() => supabase.rpc('request_page_deep', { pid }))} />}
+          {visibleTab === 'overview' && (!o || o.discovery_only) && !scanning ? <div className="card"><h2>Website audit</h2><p className="muted">Run a separate audit of speed, SEO, links, security and privacy when you need it. Adding a site only discovers possible customer flows.</p><button className="btn" onClick={() => act(() => supabase.rpc('request_website_audit', { sid: site.id }))}>Run website audit</button></div> : visibleTab === 'overview' && <OverviewTab site={site} pages={pages} onDeep={(pid: string) => act(() => supabase.rpc('request_page_deep', { pid }))} />}
           {visibleTab === 'tests' && <TestsTab site={site} tests={tests.filter((t) => !isCustomerFlow(t))} runs={runs} pages={pages} act={act} />}
           {visibleTab === 'runs' && <RunsTab runs={runs} />}
           {visibleTab === 'deploys' && <DeploysTab siteId={site.id} runs={runs} />}

@@ -1,3 +1,4 @@
+import { assertPublic } from './api.mjs';
 import { runSteps, StepFailure, STEP_TIMEOUT } from './runner.mjs';
 import { randomBytes } from 'node:crypto';
 import { watchPage } from './debug.mjs';
@@ -10,11 +11,12 @@ async function attempt(browser, test) {
   let result;
   try {
     context = await browser.newContext({ serviceWorkers: test.credentialRun ? 'block' : 'allow' });
-    if (test.credentialRun) {
-      const origin = new URL(test.site.url).origin;
+    if (test.credentialRun || test.name?.startsWith('[Flow] ')) {
+
       await context.route('**/*', async route => {
-        if (route.request().isNavigationRequest() && new URL(route.request().url()).origin !== origin) {
-          await route.abort(); return;
+        if (route.request().isNavigationRequest()) {
+          const url = new URL(route.request().url());
+          try { if (!test.allowHttpForTests) await assertPublic(url); } catch { await route.abort(); return; }
         }
         await route.continue();
       });
@@ -60,6 +62,7 @@ export async function executeTest(browser, test, { credentials, allowHttpForTest
     }
     test = { ...test, credentialRun: true, evidenceComparisonKey: randomBytes(32), steps: resolveCredentialSteps(test.steps, credentials) };
   }
+  test = { ...test, allowHttpForTests };
   const attempts = [await attempt(browser, test)];
   if (['real_bug', 'timeout'].includes(attempts[0].failure?.kind)) {
     await new Promise((resolve) => setTimeout(resolve, 1000));

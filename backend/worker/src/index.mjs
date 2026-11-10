@@ -1,3 +1,5 @@
+import { proposeGenericFlow } from './generic-flow.mjs';
+import { searchSelectors } from './selector-search.mjs';
 import { generateFlowDraft, generateSelectorDraft } from './flow-ai.mjs';
 import { discoverFlows, recordPublicJourneys } from './customer-flows.mjs';
 import os from 'node:os';
@@ -439,7 +441,7 @@ async function runApiMonitors() {
 
 async function processAi(browser, req) {
   const fail = (error) => db.from('ai_requests').update({ status: 'error', error }).eq('id', req.id);
-  if (!aiEnabled()) return fail('The AI assistant is not configured (GEMINI_API_KEY is missing).');
+  if (!req.prompt.startsWith('[SELECTOR_SEARCH]') && !req.prompt.startsWith('[FLOW_DISCOVER]') && !aiEnabled()) return fail('The AI assistant is not configured (GEMINI_API_KEY is missing).');
   const { data: site } = await db.from('sites').select('url, overview').eq('id', req.site_id).single();
   if (!site) return fail('Site not found.');
   let pageUrl = site.url;
@@ -447,7 +449,11 @@ async function processAi(browser, req) {
     if (req.page_url && new URL(req.page_url).host === new URL(site.url).host) pageUrl = req.page_url;
   } catch { /* invalid URL: use the site URL */ }
   try {
-    const r = req.prompt.startsWith('[SELECTOR_DRAFT]')
+    const r = req.prompt.startsWith('[FLOW_DISCOVER]')
+      ? await proposeGenericFlow(browser, {siteUrl:site.url, ...JSON.parse(req.prompt.slice(15))})
+      : req.prompt.startsWith('[SELECTOR_SEARCH]')
+      ? await searchSelectors(browser, {...JSON.parse(req.prompt.slice(17)), siteUrl: site.url})
+      : req.prompt.startsWith('[SELECTOR_DRAFT]')
       ? await generateSelectorDraft({siteUrl: site.url, prompt: req.prompt.slice(16), candidates: site.overview?.flow_candidates ?? []})
       : req.prompt.startsWith('[FLOW_DRAFT]')
       ? await generateFlowDraft({ cacheScope: req.site_id, siteUrl: site.url, prompt: req.prompt.slice(12), candidates: (site.overview?.flow_candidates ?? []).map(({public_run, ...candidate}) => candidate) })
