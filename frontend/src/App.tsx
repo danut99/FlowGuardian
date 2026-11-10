@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { useSession } from './lib/useSession'
 import { supabase } from './lib/supabase'
-import { pendingSite, planChanged, usePlan } from './lib/plan'
+import { pendingSite, planChanged } from './lib/plan'
 import { Layout } from './components/Layout'
 import { Landing } from './pages/Landing'
 import { PublicReport } from './pages/PublicReport'
@@ -10,7 +10,6 @@ import { Login } from './pages/Login'
 import { Sites } from './pages/Sites'
 import { SiteDetail } from './pages/SiteDetail'
 import { ComingSoon } from './pages/ComingSoon'
-import { ApiGuardian } from './pages/ApiGuardian'
 
 export default function App() {
   const session = useSession()
@@ -38,19 +37,13 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Sites />} />
           <Route path="/sites/:id" element={<SiteDetail />} />
-          <Route path="/api" element={<ApiRoute />} />
+          <Route path="/api" element={<ComingSoon module="api" />} />
           <Route path="/flowfix" element={<ComingSoon module="flowfix" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
     </BrowserRouter>
   )
-}
-
-function ApiRoute() {
-  const plan = usePlan()
-  if (!plan) return null
-  return plan.api_guardian ? <ApiGuardian /> : <ComingSoon module="api" locked />
 }
 
 // The site typed on the landing page is added right after sign-up / sign-in

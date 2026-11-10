@@ -32,6 +32,7 @@ export function FailureDetails({ run, stepLabel }: { run: Run; stepLabel?: strin
     <div className="failure">
       <div className="failure-info">
         <b>{outcomeLabel(run)}</b>
+        {run.debug?.credential_protected && <p className="small">This run used a saved test account. Screenshots and raw browser diagnostics are disabled; recorded step outcomes are retained.</p>}
         {run.debug?.outcome === 'confirmed' && <p className="small">The same check failed in two fresh browser sessions. This does not establish global downtime.</p>}
         {run.debug?.outcome === 'inconclusive' && <p className="small">We could not verify this result. This is not a confirmed site issue.</p>}
         {stepLabel && <div className="small">At step {run.failed_step}: {stepLabel}</div>}

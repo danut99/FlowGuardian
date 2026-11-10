@@ -13,7 +13,7 @@ export function ScoreRing({ score, size = 72 }: { score: number | null; size?: n
   return (
     <div style={{ position: 'relative', width: size, height: size, flex: 'none' }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
         {score != null && (
           <motion.circle
             cx={size / 2} cy={size / 2} r={r} fill="none" stroke={scoreColor(value)} strokeWidth={stroke} strokeLinecap="round"

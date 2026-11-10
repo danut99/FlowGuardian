@@ -8,7 +8,8 @@ export function classifyAttempts(attempts) {
   if (f.kind === 'selector_changed') return { status: 'error', outcome: 'maintenance', severity: 'maintenance' };
   const first = attempts[0].failure;
   const confirmed = attempts.length >= 2 && f.kind === 'real_bug'
-    && first?.kind === 'real_bug' && first.position === f.position && first.message === f.message;
+    && first?.kind === 'real_bug' && first.position === f.position
+    && (first.confirmation_key ?? first.message) === (f.confirmation_key ?? f.message);
   return confirmed
     ? { status: 'failed', outcome: 'confirmed', severity: 'critical' }
     : { status: 'error', outcome: 'inconclusive', severity: null };

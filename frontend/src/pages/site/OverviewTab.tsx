@@ -30,7 +30,7 @@ function NetworkBars({ results }: { results: NetworkResult[] }) {
               <span className="muted">{lcpLabel(ms)}{r.bytes ? ` · ${(r.bytes / 1e6).toFixed(1)} MB` : ''}</span>
             </div>
             {r.lcp_element && <p className="muted small">LCP element: &lt;{r.lcp_element.tag}{r.lcp_element.id ? `#${r.lcp_element.id}` : ''}&gt; {r.lcp_element.resource}</p>}
-            <div style={{ height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+            <div style={{ height: 10, borderRadius: 999, background: 'var(--panel-2)', overflow: 'hidden' }}>
               <motion.div
                 initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1.1, ease: 'easeOut' }}
                 style={{ height: '100%', borderRadius: 999, background: barColor(ms, r.id === '3g' ? 8000 : 4000, r.id === '3g' ? 20_000 : 10_000) }}

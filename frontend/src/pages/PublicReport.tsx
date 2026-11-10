@@ -1,5 +1,6 @@
+import { PublicFlowsReport } from './PublicFlowsReport'
 import { FindingEvidence } from '../components/FindingEvidence'
-import type { Check } from '../types'
+import type { Check, FlowCandidate } from '../types'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
@@ -10,6 +11,9 @@ import { fadeUp, stagger } from '../components/motion'
 import { BrandMark } from './Landing'
 
 type Teaser = {
+  evidence_pending?: boolean
+  kind?: 'flows'
+  flow_candidates?: FlowCandidate[]
   title: string
   icon: string | null
   type: string | null
@@ -27,7 +31,7 @@ const GROUP_LABEL: Record<string, string> = {
   availability: 'Availability', performance: 'Speed', network: 'Slow connection', content: 'Functionality',
   text: 'Text & content', seo: 'SEO & mobile', security: 'Security', compliance: 'Privacy & policy review',
 }
-const CHECKING = ['Opening your home page like a real visitor', 'Measuring speed', 'Checking HTTPS and the certificate', 'Reading SEO and mobile basics', 'Looking at security headers', 'Checking privacy and cookie basics']
+const CHECKING = ['Opening the public page', 'Reading navigation links and form signals', 'Identifying possible customer journeys', 'Preparing suggestions for you to configure']
 // Placeholder rows behind the lock: never real data, so there is nothing to uncover in the page source
 const LOCKED_ROWS = ['Which pages are affected and why', 'Step-by-step fix for each problem', 'All pages of the site, not just the home page', 'Broken links and images across the site', 'Speed on a slow phone connection']
 
@@ -80,7 +84,7 @@ export function PublicReport() {
         </div>
       )}
 
-      {scan?.teaser && scan.status !== 'error' && <>{scan.status !== 'done' && <p className="notice-progress">First results are ready. Checking performance, privacy and the remaining home page checks...</p>}<Report host={host} t={scan.teaser} /></>}
+      {scan?.teaser && scan.status !== 'error' && <>{scan.status !== 'done' && <p className="notice-progress">First results are ready. Recording actual public page visits and screenshots...</p>}<Report host={host} t={scan.teaser} /></>}
     </div>
   )
 }
@@ -116,6 +120,7 @@ function Checking({ host }: { host: string }) {
 }
 
 function Report({ host, t }: { host: string; t: Teaser }) {
+  if (t.kind === 'flows') return <PublicFlowsReport title={t.title || host} candidates={t.flow_candidates ?? []} pending={t.evidence_pending} />
   const issues = t.counts.fail + t.counts.warn
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="report">

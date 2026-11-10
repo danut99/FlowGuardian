@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:accounts": "node --test scripts/test-credentials.test.mjs scripts/credential-storage.test.mjs",
     "benchmark": "node scripts/benchmark/run.mjs",
     "start": "node src/index.mjs",
     "dev": "node --env-file=../../.env src/index.mjs",
@@ -15,5 +16,8 @@
     "@supabase/supabase-js": "^2.45.0",
     "playwright": "^1.48.0",
     "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16"
   }
 }

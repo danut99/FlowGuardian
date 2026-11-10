@@ -7,8 +7,8 @@ import { unlimited, usePlan } from '../lib/plan'
 import { LockIcon } from './icons'
 
 const MODULES = [
-  { to: '/', label: 'Website Tester', match: (p: string) => p === '/' || p.startsWith('/sites') },
-  { to: '/api', label: 'API Guardian', match: (p: string) => p.startsWith('/api') },
+  { to: '/', label: 'Customer Flows', match: (p: string) => p === '/' || p.startsWith('/sites') },
+  { to: '/api', label: 'API Guardian', soon: true, match: (p: string) => p.startsWith('/api') },
   { to: '/flowfix', label: 'FlowFix', soon: true, match: (p: string) => p.startsWith('/flowfix') },
 ]
 
@@ -34,7 +34,7 @@ export function Layout({ email, children }: { email?: string; children: ReactNod
               <NavLink key={m.to} to={m.to} className={`module-link${active ? ' active' : ''}`}>
                 {active && <motion.div layoutId="module-pill" className="module-pill" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                 <span>{m.label}</span>
-                {m.to === '/api' && plan && !plan.api_guardian && <LockIcon />}
+                {m.to === '/api' && <LockIcon />}
                 {m.soon && <em className="soon">soon</em>}
               </NavLink>
             )

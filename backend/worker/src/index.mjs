@@ -1,5 +1,8 @@
+import { generateFlowDraft, generateSelectorDraft } from './flow-ai.mjs';
+import { discoverFlows, recordPublicJourneys } from './customer-flows.mjs';
 import os from 'node:os';
 import { executeTest } from './execution.mjs';
+import { needsTestCredentials } from './test-credentials.mjs';
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
@@ -53,7 +56,7 @@ async function openIncident(run, severity, message, proposed) {
 async function processRun(browser, run) {
   const started = Date.now();
   const { data: test, error } = await db.from('tests')
-    .select('id, name, site:sites(url, verified_at), steps:test_steps(position, action, locators, value)')
+    .select('id, name, site:sites(url, verified_at), steps:test_steps(position, action, locators, value, note)')
     .eq('id', run.test_id)
     .order('position', { referencedTable: 'test_steps' })
     .single();
@@ -61,7 +64,16 @@ async function processRun(browser, run) {
   // Runs can be queued manually from the dashboard, so re-check ownership verification here.
   if (!test.site.verified_at) return finish(run, { status: 'error', error: 'Site not verified.' }, started);
 
-  const { attempts, result, decision } = await executeTest(browser, test);
+  let credentials;
+  if (needsTestCredentials(test.steps)) {
+    const { data, error: credentialError } = await db.rpc('worker_test_credentials', { tid: test.id });
+    if (credentialError || !data) return finish(run, { status: 'error', error: 'Test account unavailable. Save or replace the test account and verify again.' }, started);
+    credentials = data;
+  }
+  let execution;
+  try { execution = await executeTest(browser, test, { credentials }); }
+  catch { return finish(run, { status: 'error', error: 'The test-account configuration could not be used. Check the saved account and HTTPS site.' }, started); }
+  const { attempts, result, decision } = execution;
   const evidence = [];
   for (const [index, item] of attempts.entries()) {
     let screenshot_path = null;
@@ -124,20 +136,36 @@ async function ensureEssentialTests(site, overview) {
 async function processScan(browser, site) {
   const context = await browser.newContext();
   try {
+    if (!site.overview?.audit_requested) {
+      const found = await discoverFlows(browser, site.url);
+      found.candidates = await recordPublicJourneys(browser, found.candidates);
+      const overview = {
+        ...(site.overview ?? { blocked: false, title: found.title, final_url: found.url, platforms: [], type: null, score: null, pages_checked: 1, checks: [], issues: {} }),
+        icon: found.icon, flow_candidates: found.candidates, flow_discovery_at: new Date().toISOString(),
+        discovery_only: site.overview?.discovery_only ?? !site.overview?.checks?.length,
+      };
+      const { error } = await db.from('sites').update({ overview, scan_status: 'done', scan_error: null }).eq('id', site.id);
+      if (error) throw error;
+      console.log(`FLOWS ${site.url}: ${found.candidates.length} possible flows; audit not requested`);
+      return;
+    }
     // Home page first (~10 s) so the dashboard has results while the crawl runs
     const inspected = await inspectHome(browser, site.url, { onEarly: async (overview) => {
       if (!overview.blocked) {
-        const { error } = await db.from('sites').update({ overview }).eq('id', site.id);
+        const { error } = await db.from('sites').update({ overview: { ...overview, flow_candidates: site.overview?.flow_candidates ?? [], flow_discovery_at: site.overview?.flow_discovery_at, audit_requested: true } }).eq('id', site.id);
         if (error) throw error;
       }
     } });
     const quick = await buildOverview(context, site.url, [], [], { inspected, partial: true });
-    if (!quick.blocked) await db.from('sites').update({ overview: quick }).eq('id', site.id);
+    if (!quick.blocked) await db.from('sites').update({ overview: { ...quick, flow_candidates: site.overview?.flow_candidates ?? [], flow_discovery_at: site.overview?.flow_discovery_at, audit_requested: true } }).eq('id', site.id);
     const [pages, network] = quick.blocked ? [[], []]
       // On small servers the throttled phone runs would starve the crawl (and skew both timings)
       : os.cpus().length >= 4 ? await Promise.all([crawlSite(context, site.url), measureSlowNetwork(browser, site.url)])
         : [await crawlSite(context, site.url), await measureSlowNetwork(browser, site.url)];
     const overview = quick.blocked ? quick : await buildOverview(context, site.url, pages, network, { inspected });
+    overview.flow_candidates = site.overview?.flow_candidates ?? [];
+    overview.flow_discovery_at = site.overview?.flow_discovery_at;
+    overview.discovery_only = false;
     await db.from('page_checks').delete().eq('site_id', site.id);
     await removeFolder(db.storage.from('page-shots'), site.id);
     const { error } = await db.from('page_checks').insert(pages.map((p) => ({
@@ -412,14 +440,18 @@ async function runApiMonitors() {
 async function processAi(browser, req) {
   const fail = (error) => db.from('ai_requests').update({ status: 'error', error }).eq('id', req.id);
   if (!aiEnabled()) return fail('The AI assistant is not configured (GEMINI_API_KEY is missing).');
-  const { data: site } = await db.from('sites').select('url').eq('id', req.site_id).single();
+  const { data: site } = await db.from('sites').select('url, overview').eq('id', req.site_id).single();
   if (!site) return fail('Site not found.');
   let pageUrl = site.url;
   try {
     if (req.page_url && new URL(req.page_url).host === new URL(site.url).host) pageUrl = req.page_url;
   } catch { /* invalid URL: use the site URL */ }
   try {
-    const r = await answer(browser, { siteUrl: site.url, pageUrl, prompt: req.prompt });
+    const r = req.prompt.startsWith('[SELECTOR_DRAFT]')
+      ? await generateSelectorDraft({siteUrl: site.url, prompt: req.prompt.slice(16), candidates: site.overview?.flow_candidates ?? []})
+      : req.prompt.startsWith('[FLOW_DRAFT]')
+      ? await generateFlowDraft({ cacheScope: req.site_id, siteUrl: site.url, prompt: req.prompt.slice(12), candidates: (site.overview?.flow_candidates ?? []).map(({public_run, ...candidate}) => candidate) })
+      : await answer(browser, { siteUrl: site.url, pageUrl, prompt: req.prompt });
     await db.from('ai_requests').update({
       status: 'done', reply: r.reply, draft: r.draft, verified: r.verified ?? null, verify_error: r.verify_error ?? null,
     }).eq('id', req.id);
@@ -431,43 +463,23 @@ async function processAi(browser, req) {
 }
 
 
-function publicTeaser(o) {
-    const issues = o.checks.filter((c) => c.status !== 'pass')
-      .sort((a, b) => (a.status === 'fail' ? 0 : 1) - (b.status === 'fail' ? 0 : 1));
-    const count = (list) => ({
-      fail: list.filter((c) => c.status === 'fail').length,
-      warn: list.filter((c) => c.status === 'warn').length,
-      pass: list.filter((c) => c.status === 'pass').length,
-    });
-    const groups = [...new Set(o.checks.map((c) => c.group))].map((g) => ({ id: g, ...count(o.checks.filter((c) => c.group === g)) }));
-  return {
-    partial: o.stage === 'initial',
-    title: o.title, icon: o.icon, type: o.type, platforms: o.platforms, score: o.score,
-    counts: count(o.checks), groups,
-    top: issues.slice(0, 3).map((c) => ({ group: c.group, label: c.label, status: c.status, detail: c.detail, verdict: c.verdict, evidence: c.evidence })),
-    hidden: Math.max(0, issues.length - 3),
-  };
-}
-
 // Landing-page check without an account: home page only, and only a teaser is stored
 async function processPublicScan(browser, scan) {
   const done = (fields) => db.from('public_scans').update(fields).eq('id', scan.id);
   const context = await browser.newContext();
   try {
     await assertPublic(new URL(scan.url));
-    const inspected = await inspectHome(browser, scan.url, { onEarly: async (o) => {
-      if (!o.blocked) {
-        const { error } = await done({ teaser: publicTeaser(o) });
-        if (error) throw error;
-      }
+    const found = await discoverFlows(browser, scan.url);
+    const initial = { kind: 'flows', title: found.title, icon: found.icon, flow_candidates: found.candidates, evidence_pending: true };
+    const { error: publishError } = await done({ teaser: initial });
+    if (publishError) throw publishError;
+    found.candidates = await recordPublicJourneys(browser, found.candidates);
+    const { error } = await done({ status: 'done', teaser: {
+      kind: 'flows', title: found.title, icon: found.icon, type: null, platforms: [], score: null,
+      flow_candidates: found.candidates, counts: { fail: 0, warn: 0, pass: 0 }, groups: [], top: [], hidden: 0,
     } });
-    const o = await buildOverview(context, scan.url, [], [], { inspected, partial: true });
-    if (o.blocked) {
-      await done({ status: 'error', error: `The site answered HTTP ${o.status}: it blocks automated visitors, so we can't check it.` });
-      return;
-    }
-    await done({ status: 'done', teaser: publicTeaser(o) });
-    console.log(`PUBLIC ${scan.url}: score ${o.score}`);
+    if (error) throw error;
+    console.log(`PUBLIC FLOWS ${scan.url}: ${found.candidates.length} possible journeys`);
   } catch (e) {
     await done({ status: 'error', error: (e?.message ?? String(e)).split('\n')[0].slice(0, 200) });
     console.log(`PUBLIC ERROR ${scan.url}: ${e?.message ?? e}`);

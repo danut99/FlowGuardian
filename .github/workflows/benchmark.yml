@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'backend/worker/**'
+      - 'backend/supabase/migrations/**'
       - '.github/workflows/benchmark.yml'
   pull_request:
     paths:
       - 'backend/worker/**'
+      - 'backend/supabase/migrations/**'
       - '.github/workflows/benchmark.yml'
   workflow_dispatch:
 
@@ -30,7 +32,7 @@ jobs:
           cache-dependency-path: backend/worker/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: node --test scripts/outcomes.test.mjs scripts/trust-checks.test.mjs
+      - run: node --test scripts/outcomes.test.mjs scripts/trust-checks.test.mjs scripts/test-credentials.test.mjs scripts/credential-storage.test.mjs
       - run: npm run benchmark
       - uses: actions/upload-artifact@v4
         if: always()

@@ -22,6 +22,7 @@ export function DevDetails({ run }: { run: Run }) {
   const [copied, setCopied] = useState(false)
   const d = run.debug
   if (!dev || !d) return null
+  if (d.credential_protected) return <p className="muted small">Raw diagnostics are disabled for this test-account run. Inspect the recorded step outcomes instead.</p>
 
   async function copy() {
     await navigator.clipboard.writeText(asMarkdown(run, d!))

@@ -1,7 +1,10 @@
+import { FlowsTab } from './site/FlowsTab'
+import { isCustomerFlow, flowRevision } from '../lib/customerFlows'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { supabase } from '../lib/supabase'
+import { LockIcon } from '../components/icons'
 import { Favicon, ScoreRing } from '../components/ui'
 import { OverviewTab } from './site/OverviewTab'
 import { TestsTab } from './site/TestsTab'
@@ -10,7 +13,7 @@ import { DeploysTab } from './site/DeploysTab'
 import { HistoryTab } from './site/HistoryTab'
 import type { PageCheck, Run, Site, Test } from '../types'
 
-type Tab = 'overview' | 'tests' | 'runs' | 'deploys' | 'history'
+type Tab = 'flows' | 'overview' | 'tests' | 'runs' | 'deploys' | 'history'
 
 const PAGE_COLUMNS = 'id, url, http_status, load_ms, error, status, analysis_error, score, metrics, checks, deep_status, deep, deep_error'
 
@@ -20,7 +23,7 @@ export function SiteDetail() {
   const [tests, setTests] = useState<Test[]>([])
   const [runs, setRuns] = useState<Run[]>([])
   const [pages, setPages] = useState<PageCheck[]>([])
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useState<Tab>('flows')
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -46,7 +49,19 @@ export function SiteDetail() {
     if (firstError) setError(firstError.message)
     setSite(siteRes.data)
     setTests(testsRes.data ?? [])
-    setRuns((runsRes.data as unknown as Run[]) ?? [])
+    // Fetch the latest pass per current flow revision, even outside the 30 recent runs.
+    const passedResults = await Promise.all((testsRes.data ?? []).filter(isCustomerFlow).map(async test => {
+      let query = supabase.from('runs')
+        .select('id, test_id, status, failure_kind, error, failed_step, screenshot_path, debug, duration_ms, created_at, test:tests!inner(name, site_id)')
+        .eq('test_id', test.id).eq('status', 'passed')
+      const revision = flowRevision(test as Test)
+      if (revision) query = query.gte('created_at', revision)
+      return query.order('created_at', { ascending: false }).limit(1)
+    }))
+    const passedError = passedResults.find(result => result.error)?.error
+    if (passedError) setError(passedError.message)
+    const allRuns = [...((runsRes.data as unknown as Run[]) ?? []), ...passedResults.flatMap(result => (result.data as unknown as Run[]) ?? [])]
+    setRuns([...new Map(allRuns.map(run => [run.id, run])).values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)))
     setPages((pagesRes.data as unknown as PageCheck[]) ?? [])
   }, [id])
 
@@ -96,10 +111,13 @@ export function SiteDetail() {
 
   const scanning = site.scan_status === 'pending' || site.scan_status === 'scanning'
   const o = site.overview
-  const proposedCount = tests.filter((t) => t.status === 'proposed').length
+  const auditCompleted = Boolean(site.scanned_at && o && !o.discovery_only && !o.blocked && !o.partial && o.stage !== 'initial')
+  const auditTabLocked = (id: Tab) => !auditCompleted && !['flows', 'overview'].includes(id)
+  const visibleTab = auditTabLocked(tab) ? 'overview' : tab
   const TABS: { id: Tab; label: string; count?: number }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'tests', label: 'Tests', count: tests.length - proposedCount || undefined },
+    { id: 'flows', label: 'Customer Flows', count: tests.filter(isCustomerFlow).length || undefined },
+    { id: 'overview', label: 'Website audit' },
+    { id: 'tests', label: 'Tests', count: tests.filter((t) => !isCustomerFlow(t) && t.status !== 'proposed').length || undefined },
     { id: 'runs', label: 'Runs', count: runs.length || undefined },
     { id: 'deploys', label: 'Deploys' },
     { id: 'history', label: 'History' },
@@ -121,32 +139,36 @@ export function SiteDetail() {
             )}
           </div>
         </div>
-        {!scanning && (
-          <button className="btn ghost sm" onClick={() => act(() => supabase.rpc('request_scan', { sid: site.id }))}>
-            Analyze again
+        {!scanning && visibleTab === 'overview' && (
+          <button className="btn ghost sm" onClick={() => act(() => supabase.from('sites').update({ overview: { ...site.overview, audit_requested: true }, scan_status: 'pending', scan_error: null }).eq('id', site.id))}>
+            Run website audit
           </button>
         )}
-        {o && !o.blocked && !scanning && <ScoreRing score={o.score} size={84} />}
+        {o && !o.discovery_only && !o.blocked && !scanning && visibleTab === 'overview' && <ScoreRing score={o.score} size={84} />}
       </div>
       {error && <p className="notice error">{error}</p>}
 
       <div className="tabs">
         {TABS.map((t) => (
-          <button key={t.id} className={`tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={`tab${visibleTab === t.id ? ' active' : ''}`} disabled={auditTabLocked(t.id)} title={auditTabLocked(t.id) ? 'Complete your first website audit to unlock this tab' : undefined} onClick={() => setTab(t.id)}>
             {t.label}
+            {auditTabLocked(t.id) && <LockIcon />}
             {t.count != null && <span className="count">{t.count}</span>}
-            {tab === t.id && <motion.div layoutId="tab-line" className="tab-line" />}
+            {visibleTab === t.id && <motion.div layoutId="tab-line" className="tab-line" />}
           </button>
         ))}
       </div>
 
+      {!auditCompleted && <p className="muted small">Complete your first website audit to unlock Tests, Runs, Deploys, and History.</p>}
+
       <AnimatePresence mode="wait">
-        <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-          {tab === 'overview' && <OverviewTab site={site} pages={pages} onDeep={(pid: string) => act(() => supabase.rpc('request_page_deep', { pid }))} />}
-          {tab === 'tests' && <TestsTab site={site} tests={tests} runs={runs} pages={pages} act={act} />}
-          {tab === 'runs' && <RunsTab runs={runs} />}
-          {tab === 'deploys' && <DeploysTab siteId={site.id} runs={runs} />}
-          {tab === 'history' && <HistoryTab siteId={site.id} />}
+        <motion.div key={visibleTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
+          {visibleTab === 'flows' && <FlowsTab site={site} tests={tests} runs={runs} pages={pages} reload={load} />}
+          {visibleTab === 'overview' && (!o || o.discovery_only) && !scanning ? <div className="card"><h2>Website audit</h2><p className="muted">Run a separate audit of speed, SEO, links, security and privacy when you need it. Adding a site only discovers possible customer flows.</p><button className="btn" onClick={() => act(() => supabase.from('sites').update({ overview: { ...site.overview, audit_requested: true }, scan_status: 'pending', scan_error: null }).eq('id', site.id))}>Run website audit</button></div> : visibleTab === 'overview' && <OverviewTab site={site} pages={pages} onDeep={(pid: string) => act(() => supabase.rpc('request_page_deep', { pid }))} />}
+          {visibleTab === 'tests' && <TestsTab site={site} tests={tests.filter((t) => !isCustomerFlow(t))} runs={runs} pages={pages} act={act} />}
+          {visibleTab === 'runs' && <RunsTab runs={runs} />}
+          {visibleTab === 'deploys' && <DeploysTab siteId={site.id} runs={runs} />}
+          {visibleTab === 'history' && <HistoryTab siteId={site.id} />}
         </motion.div>
       </AnimatePresence>
     </motion.div>

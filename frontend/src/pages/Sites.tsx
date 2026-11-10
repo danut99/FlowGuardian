@@ -62,12 +62,12 @@ export function Sites() {
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
       <section className="hero-box">
-        <motion.div variants={fadeUp}><span className="chip accent">Website Tester</span></motion.div>
+        <motion.div variants={fadeUp}><span className="chip accent">Customer Flows</span></motion.div>
         <motion.h1 variants={fadeUp} className="gradient-text" style={{ marginTop: '1rem' }}>
-          Enter a URL and find out<br />what’s not working on your website
+          Add your website and discover<br />your customer flows
         </motion.h1>
         <motion.p variants={fadeUp} className="muted">
-          We check availability, speed, links, SEO and security. Then we keep monitoring your site.
+          Discover possible journeys, configure the expected result and verify before enabling monitoring. Website audits are available separately on demand.
         </motion.p>
         {atLimit ? (
           <motion.div variants={fadeUp} className="card plan-limit">
@@ -78,13 +78,13 @@ export function Sites() {
           <motion.form variants={fadeUp} className="url-form" onSubmit={addSite}>
             <input placeholder="my-store.com" value={url} onChange={(e) => setUrl(e.target.value)} required />
             <motion.button className="btn" disabled={busy} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-              {busy ? <span className="spinner" /> : null} Analyze
+              {busy ? <span className="spinner" /> : null} Discover flows
             </motion.button>
           </motion.form>
         )}
         {error && <p className="notice error">{error}</p>}
         <motion.div variants={fadeUp} className="hero-chips">
-          {['Availability', 'Speed', 'Broken links', 'SEO & mobile', 'Security'].map((c) => (
+          {['Navigation', 'Contact', 'Signup', 'Product journeys', 'Search'].map((c) => (
             <span key={c} className="chip">{c}</span>
           ))}
         </motion.div>
@@ -115,7 +115,7 @@ export function Sites() {
                       {o?.type && <span className="chip">{o.type}</span>}
                     </div>
                   </div>
-                  {!scanning && o && !o.blocked && <ScoreRing score={o.score} size={52} />}
+                  {!scanning && o && !o.discovery_only && !o.blocked && <ScoreRing score={o.score} size={52} />}
                 </Link>
                 <button className="site-delete" title="Delete site" aria-label={`Delete ${s.name ?? s.url}`} onClick={() => deleteSite(s)}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
